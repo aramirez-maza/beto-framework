@@ -225,32 +225,28 @@ BETO_EXECUTOR is the automated pipeline that implements the BETO Framework using
 
 ```
 IDEA_RAW input
-      │
-      ▼
-┌─────────────────────────────────────────────────────────┐
-│  MOTOR RAZONAMIENTO (claude-sonnet-4-6)                  │
-│                                                          │
-│  Step 0 ──► Step 1 ──► Step 2 ──► Step 3 ──► Step 4    │
-│               │                                  │       │
-│              G-1                                G-2      │
-│              gate                               gate     │
-│                                                          │
-│  Step 5 ──► Step 6 ──► Step 7 ──► Step 8 ──► Step 9    │
-│                                                  │       │
-│                                                 G-3      │
-│                                                 gate     │
-└─────────────────────────────────────────────────────────┘
-      │
-      ▼
-┌─────────────────────────────────────────────────────────┐
-│  MOTOR CÓDIGO (Qwen-Coder, local GPU)                   │
-│                                                          │
-│  Plan derivation ──► Scaffold generation ──►            │
-│  LLM implementation ──► TRACE_REGISTRY verification     │
-└─────────────────────────────────────────────────────────┘
-      │
-      ▼
-Verified source files (TRACE_VERIFIED status)
+      |
+      v
+  [MOTOR RAZONAMIENTO: claude-sonnet-4-6]
+
+  Step 0 --> Step 1 --> Step 2 --> Step 3 --> Step 4
+               |                                |
+              G-1                              G-2
+             gate                             gate
+
+  Step 5 --> Step 6 --> Step 7 --> Step 8 --> Step 9
+                                               |
+                                              G-3
+                                             gate
+      |
+      v
+  [MOTOR CODIGO: Qwen-Coder, local GPU]
+
+  Plan derivation --> Scaffold generation -->
+  LLM implementation --> TRACE_REGISTRY verification
+      |
+      v
+  Verified source files (TRACE_VERIFIED status)
 ```
 
 The system operates from a local infrastructure stack (LiteLLM gateway at `localhost:8000`, Qwen-Coder via vLLM at `localhost:8001` on an NVIDIA RTX 4090), enabling fully local materialization without external API dependency for code generation.
@@ -374,17 +370,17 @@ A fully BETO-governed system exhibits a complete chain of custody for every impl
 
 ```
 Source code line
-    │ (BETO-TRACE annotation)
-    ▼
+    | (BETO-TRACE annotation)
+    v
 TRACE_REGISTRY identifier
-    │ (registry lookup)
-    ▼
+    | (registry lookup)
+    v
 BETO_CORE section and authorized type
-    │ (gate approval record)
-    ▼
+    | (gate approval record)
+    v
 Operator decision at human gate
-    │ (IDEA_RAW provenance)
-    ▼
+    | (IDEA_RAW provenance)
+    v
 Original operator intent
 ```
 
