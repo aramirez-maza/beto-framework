@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+cycles/
+cycles_test/
+test_cycles/
+test_output/
+debug/
+*.json
+!examples/**/*.json
+.claude/
