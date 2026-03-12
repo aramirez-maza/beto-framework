@@ -221,7 +221,12 @@ This is enforced structurally, not through prompt engineering or model complianc
 
 ## License
 
-[PLACEHOLDER: License to be added before public release — MIT recommended]
+MIT License — Copyright (c) 2026 Alberto Ramírez
+
+Free to use, copy, modify, and distribute — with one requirement:
+**the copyright notice and author attribution must be preserved in all copies.**
+
+See [LICENSE](LICENSE) for full terms.
 
 ---
 
