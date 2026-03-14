@@ -4,34 +4,23 @@
 
 BETO is an epistemic governance protocol for LLM-assisted software specification and materialization. It enforces a formal boundary between what the operator has declared and what the model has assumed — preventing the silent completion problem that makes AI-generated software unauditable.
 
-**Version:** 4.2 (March 2026)
-**Author:** Alberto Ramírez
+**Version:** 4.2 (March 2026) · **Author:** Alberto Ramírez · **License:** MIT
 
 ---
 
-## The Problem
+## Why BETO Exists
 
-When you ask a Large Language Model to design or build a software system, it does not acknowledge what it does not know. It *completes* — inventing fields because they seem reasonable, assuming architectures because they are conventional, generating code that handles the average case but was never authorized by you.
+When you ask an LLM to design or build a software system, it does not acknowledge what it does not know. It *completes* — inventing fields because they seem reasonable, assuming architectures because they are conventional, generating code that handles the average case but was never authorized by you.
 
-This is not a model defect. Completion is the core function of LLMs. The defect is architectural: modern development workflows have no formal mechanism to distinguish **what you declared** from **what the model invented**. The result is:
+This is not a model defect. Completion is the core function of LLMs. The defect is architectural: there is no formal mechanism to distinguish **what you declared** from **what the model invented**. The result is specifications that do things nobody asked for, data contracts with no traceable origin, and code that cannot be audited from requirement to line.
 
-- Specifications that do things nobody asked for
-- Data contracts with no traceable origin
-- Code that cannot be audited from requirement to line
-- Epistemic debt that compounds with every AI-assisted sprint
-
-BETO solves this at the point of generation — not after.
+BETO converts that gap into a traceable event — not after the fact, but at the point of generation.
 
 ---
 
-## What BETO Is
+## Core Idea
 
-BETO is a complete, formally specified 11-step protocol that governs every phase of LLM-assisted software development, from initial idea to delivered, traceable code.
-
-It introduces three core mechanisms:
-
-### 1. Epistemic States
-Every element of a system carries one of three states:
+Every element of a system carries one of three epistemic states:
 
 | State | Meaning | Effect |
 |---|---|---|
@@ -39,70 +28,61 @@ Every element of a system carries one of three states:
 | `NOT_STATED` | Not declared; cannot be inferred | Blocks execution — registered as Open Question |
 | `INFERRED` | Derived by the model | Authorized only in Steps 0–1. Prohibited after first operator approval |
 
-An element in `NOT_STATED` cannot be materialized. It must be declared by the operator — or formally registered as a known limit of the system.
-
-### 2. BETO_GAP Protocol
-When the executor encounters an element that would require unauthorized inference, it triggers a `BETO_GAP`:
-
-- **Derivable from System Intent** → `BETO_GAP [RESOLVED: BETO_ASSISTED]` — logged, justified, continues
-- **Not derivable** → `BETO_GAP [ESCALATED]` — mandatory halt, operator must decide
-
-There is no silent resolution. Every undeclared element becomes a traceable event.
-
-### 3. TRACE_REGISTRY + BETO-TRACE Annotations
-Every specification generates a `TRACE_REGISTRY`: a catalogue of authorized traceability IDs in the pattern:
-
-```
-SYSTEM_NAME.SEC<N>.<TYPE>.<ELEMENT>
-```
-
-Every line of generated code is annotated with a `BETO-TRACE` ID drawn from this registry. An ID not in the registry is unauthorized — the file cannot be delivered.
-
-This creates a complete chain of custody:
-
-```
-Source code line
-    → BETO-TRACE annotation
-    → TRACE_REGISTRY entry
-    → BETO_CORE section
-    → Operator gate decision
-    → Original intent
-```
+An element in `NOT_STATED` cannot be materialized. It must be declared by the operator — or formally registered as a known limit of the system. There is no silent resolution.
 
 ---
 
-## The 11-Step Process
+## What BETO Includes
 
-| Step | Artifact | Purpose |
-|---|---|---|
-| 0 | `PASO_0_EVALUACION.md` | Semantic eligibility — is the idea viable without invention? |
-| 1 | `BETO_CORE_DRAFT.md` | Root specification — bounded inference frontier |
-| 2 | `BETO_CORE_INTERVIEW_COMPLETED.md` | 12-section structural interview to close Open Questions |
-| 3 | `STRUCTURAL_CLASSIFICATION_REGISTRY.md` | Formal classification: PARALLEL vs SUBBETO |
-| 4 | `BETO_SYSTEM_GRAPH.md` | Topology freeze — 9 validations, operator approval required |
-| 5 | BETO_CORE children | One spec per authorized node |
-| 6 | `CIERRE_ASISTIDO.md` | Assisted closure — all OQs resolved to SUCCESS_CLOSED |
-| 7 | `PHASE_*.md` | Phase documents per node |
-| 8 | `MANIFEST_*.md` + `TRACE_REGISTRY_*.md` | Inventories and authorized ID catalogues |
-| 9 | `MANIFEST_PROYECTO.md` | Complete project manifest |
-| 10 | Source files | LLM-generated code with BETO-TRACE annotations, verified |
-| 11 | `FRAMEWORK_FEEDBACK.md` + `OPERATIONAL_LESSONS.md` | Formal learning snapshot after first production operation |
+BETO has three components with distinct purposes:
 
-Three **human gates** (G-1, G-2, G-3) give the operator full authority over topology before expansion, specification before materialization, and manifest before code generation. Gates are non-bypassable. The operator's decision is final.
+**BETO Protocol** — The 11-step governance process, from raw idea to traceable code. Defines the epistemic rules, the BETO_GAP event protocol, the TRACE_REGISTRY mechanism, and the three human gates (G-1, G-2, G-3) that give the operator full authority over topology, specification, and materialization. This is the core of the framework — the others implement it.
+
+**BETO Executor** — An automated Python pipeline that runs the full BETO Protocol using two LLM backends: a reasoning motor (Steps 0–9, tested with Claude Sonnet) and a code motor (Step 10, tested with Qwen-Coder via vLLM). Requires Python 3.11+, an OpenAI-compatible API, and optionally a local code model.
+
+**BETO Skill** — A Claude Skill that runs the complete BETO Protocol interactively in Claude Code or Claude.ai with no infrastructure required. The lowest-friction entry point to BETO.
 
 ---
 
-## Node Taxonomy
+## Quickstart
 
-BETO organizes system components into three formal node types:
+BETO Protocol can be executed manually, via the Executor (the reference implementation), or via the Skill (a Claude integration). See the full guide for both automated paths:
 
-**ROOT** — The single structural trunk. Generated from the IDEA_RAW. Exactly one per system.
+→ **[docs/quickstart.md](docs/quickstart.md)**
 
-**PARALLEL** — Born from functional independence. Can be specified using only external contracts. Developed by an independent team without knowledge of other nodes' internals.
+---
 
-**SUBBETO** — Born from structural ambiguity. Requires knowledge of its parent's internal structure to be specified correctly.
+## What BETO Guarantees
 
-The classification is enforced through a formal **semantic independence test** — not a judgment call.
+- Every element in a delivered system is traceable to an operator-authorized specification decision
+- Every undeclared element becomes a registered, blocking event — not a silent assumption
+- No code is generated for elements in `NOT_STATED` state
+- Every human gate decision is recorded and non-bypassable
+- The three empirical cycles produced 43 source files with 100% TRACE_VERIFIED delivery and zero silent completions
+
+---
+
+## What BETO Does Not Guarantee
+
+- Correctness of the operator's declarations — BETO governs the *process*, not the *quality* of the decisions
+- Mathematical proof of software correctness — "formal" in BETO means structural formalization of the authorized design universe, not formal verification in the PL/TLA+ sense
+- That conversational execution (Skill) provides the same deterministic guarantees as the automated pipeline (Executor)
+
+→ Full bounds: **[docs/claims-and-boundaries.md](docs/claims-and-boundaries.md)**
+
+---
+
+## Documentation
+
+| Document | Purpose |
+|---|---|
+| [docs/quickstart.md](docs/quickstart.md) | Minimum reproducible path to run BETO |
+| [docs/architecture.md](docs/architecture.md) | The three layers, 11-step cycle, key concepts |
+| [docs/claims-and-boundaries.md](docs/claims-and-boundaries.md) | What "formal" means in BETO; guarantees and limits |
+| [docs/verification.md](docs/verification.md) | TRACE_VERIFIED, structural invariants, failure modes |
+| [docs/faq.md](docs/faq.md) | Three questions every engineer asks first |
+| [DOCUMENTACION_OFICIAL_BETO.md](DOCUMENTACION_OFICIAL_BETO.md) | Complete reference (Spanish) |
+| [BETO_INSTRUCTIVO.md](BETO_INSTRUCTIVO.md) | Operational executor protocol (LLM-facing) |
 
 ---
 
@@ -110,113 +90,60 @@ The classification is enforced through a formal **semantic independence test** �
 
 ```
 beto-framework/
-│
-├── README.md                          ← This file
-├── DOCUMENTACION_OFICIAL_BETO.md      ← Complete official documentation
-├── BETO_INSTRUCTIVO.md                ← Operational protocol (11 steps + 11 rules)
-│
-├── framework/                         ← All 12 formal templates
-│   ├── BETO_CORE_TEMPLATE.md
-│   ├── BETO_CORE_INTERVIEW.md
-│   ├── BETO_SYSTEM_GRAPH_TEMPLATE.md
-│   ├── PHASE_TEMPLATE.md
-│   ├── MANIFEST_BETO_TEMPLATE.md
-│   ├── MANIFEST_PROYECTO_TEMPLATE.md
-│   ├── FRAMEWORK_FEEDBACK_TEMPLATE.md
-│   ├── OPERATIONAL_LESSONS_TEMPLATE.md
-│   ├── GENERATOR_RULES_TEMPLATE.md
-│   └── PROMPT_CANONICO_DE_ELICITACION.md
-│
-├── beto_executor/                     ← Automated implementation of BETO
-│   └── src/                           ← Python source code
-│       ├── main.py                    ← CLI entry point
-│       ├── orquestador/               ← Full cycle orchestration
-│       ├── motor_razonamiento/        ← Steps 0–9 (reasoning motor)
-│       ├── motor_codigo/              ← Step 10 (code generation motor)
-│       ├── gates_operador/            ← Human gate interaction + structural validation
-│       ├── gestor_ciclo/              ← Cycle state management
-│       └── beto_state/                ← Live epistemic context engine
-│
-├── research/
-│   └── BETO_Framework_Technical_Article.md   ← Technical article (SSRN preprint ID: 6411618)
-│
+├── README.md
+├── DOCUMENTACION_OFICIAL_BETO.md    ← Complete reference documentation
+├── BETO_INSTRUCTIVO.md              ← Operational protocol (LLM executor instructions)
+├── docs/                            ← Structured documentation for new users
+│   ├── quickstart.md
+│   ├── architecture.md
+│   ├── claims-and-boundaries.md
+│   ├── verification.md
+│   └── faq.md
+├── framework/                       ← 12 formal BETO templates
+├── beto_executor/                   ← Automated pipeline (Python)
+│   └── src/
+│       ├── main.py
+│       ├── orquestador/
+│       ├── motor_razonamiento/
+│       ├── motor_codigo/
+│       ├── gates_operador/
+│       ├── gestor_ciclo/
+│       └── beto_state/
 ├── skills/
-│   └── beto-framework/                        ← Claude Skill — run BETO interactively
-│       ├── SKILL.md                           ← Skill entry point (install in Claude Code)
-│       └── references/                        ← All BETO templates loaded on demand
-│
-└── examples/
-    ├── beto_executor_self_specification/      ← Complete cycle: BETO specifying itself
-    │   ├── PASO_0_EVALUACION.md
-    │   ├── BETO_CORE_DRAFT.md
-    │   ├── BETO_SYSTEM_GRAPH.md
-    │   ├── CIERRE_ASISTIDO.md
-    │   ├── MANIFEST_PROYECTO.md
-    │   └── GENERATOR_RULES_BETO_EXECUTOR.md
-    └── gastos_personales/                     ← Complete cycle: personal expense tracker
-        ├── README.md                          ← Cycle summary and usage
-        ├── registro.py                        ← TRACE_VERIFIED
-        ├── consulta.py                        ← TRACE_VERIFIED
-        └── main.py                            ← TRACE_VERIFIED
+│   └── beto-framework/              ← Claude Skill (install in Claude Code)
+│       ├── SKILL.md
+│       └── references/
+├── examples/
+│   ├── gastos_personales/           ← Complete cycle: personal expense tracker
+│   └── beto_executor_self_specification/  ← Complete cycle: BETO specifying itself
+└── research/
+    └── BETO_Framework_Technical_Article.md  ← SSRN preprint (Abstract ID: 6411618)
 ```
 
 ---
 
-## BETO Claude Skill
+## Examples
 
-`skills/beto-framework/` is a Claude Skill that runs the complete BETO v4.2 protocol interactively — no infrastructure required. Works with Claude Code and Claude.ai.
+Two complete BETO cycles are included as reference:
 
-### Installation
-
-```bash
-cp -r skills/beto-framework ~/.claude/skills/
-```
-
-### Usage
-
-```
-"corre BETO en esta idea: [your idea]"
-"run BETO on this idea: [your idea]"
-```
-
-Claude executes the full 11-step protocol, pausing at each human gate (G-1, G-2, G-3) for your approval. All BETO templates are loaded from `references/` on demand.
+- **[examples/gastos_personales/](examples/gastos_personales/)** — Personal expense tracker. 3 TRACE_VERIFIED Python files, 30 authorized IDs, 0 silent completions.
+- **[examples/beto_executor_self_specification/](examples/beto_executor_self_specification/)** — BETO specifying its own executor. 5 nodes, 14 files, 100% TRACE_VERIFIED.
 
 ---
 
-## BETO_EXECUTOR
+## Research
 
-`beto_executor/` is the automated pipeline that runs the complete BETO Framework using two LLM backends:
-
-- **Reasoning motor** — Steps 0–9: Calls an OpenAI-compatible API (tested with Claude Sonnet)
-- **Code motor** — Step 10: Calls a local code model (tested with Qwen-Coder via vLLM)
-
-Key engineering decisions:
-- **Two-call generation** for large documents (Steps 2 and 4) to guarantee tail sections are never truncated
-- **Scaffold-based code generation**: system builds a Python scaffold with BETO-TRACE IDs; the code model implements the module while preserving the trace contract
-- **BETO_STATE engine**: a live JSON document injected as the first message in each LLM call, providing compact epistemic context without full artifact injection (~60–70% context reduction in multi-node cycles)
-- **Deterministic structural validation** at each gate: 29 checks, no LLM, read-only
-
-### Running BETO_EXECUTOR
-
-```bash
-# Requirements: Python 3.11+, OpenAI-compatible API, optional local code model
-cd beto_executor/src
-pip install openai
-
-# Set your API endpoint and key
-export OPENAI_API_BASE="http://localhost:8000/v1"   # or your API endpoint
-export OPENAI_API_KEY="your-key"
-
-python main.py "Your idea here"
-```
-
-The executor will run the full specification pipeline, pausing at each human gate for your approval.
+**BETO Framework: An Epistemic Governance Protocol for LLM-Assisted Software Specification**
+Available as a preprint on SSRN (Abstract ID: 6411618, March 2026).
+Full manuscript: [research/BETO_Framework_Technical_Article.md](research/BETO_Framework_Technical_Article.md)
 
 ---
 
-## Empirical Results
+## Status
 
-Three systems have been fully specified and materialized under BETO v4.2:
+**Current:** BETO v4.2 — stable, field-tested, public repository (March 2026)
+
+**Empirical record:**
 
 | System | Nodes | Source Files | TRACE_VERIFIED | Silent Completions |
 |---|---|---|---|---|
@@ -224,29 +151,10 @@ Three systems have been fully specified and materialized under BETO v4.2:
 | BETO Artifact Evaluator | 11 | 18 | 18/18 (100%) | 0 |
 | BETO_EXECUTOR (self) | 5 | 14 | 14/14 (100%) | 0 |
 
-Every generated element in all three systems is traceable to an operator-authorized specification decision. No element was silently completed.
-
----
-
-## The Formal Claim
-
-BETO makes one formal claim:
-
-> A system specified under BETO cannot contain an element that was not either (a) explicitly declared by the operator, or (b) formally registered as unknown and blocking — with the operator notified.
-
-This is enforced structurally, not through prompt engineering or model compliance. It is guaranteed by the protocol, not by the model's behavior.
-
----
-
-## Status and Roadmap
-
-**Current:** BETO v4.2 — stable, field-tested, private repository
-
-**Planned:**
-- [ ] Public release and open-source launch
+**Roadmap:**
 - [ ] Academic publication (manuscript in `research/`)
-- [ ] Multilingual support (language-aware artifact generation)
-- [ ] BETO_INTAKE: multimodal admission layer (diagrams, audio, documents → IDEA_RAW)
+- [ ] Multilingual support
+- [ ] BETO_INTAKE: multimodal admission layer
 
 ---
 
@@ -254,17 +162,5 @@ This is enforced structurally, not through prompt engineering or model complianc
 
 MIT License — Copyright (c) 2026 Alberto Ramírez
 
-Free to use, copy, modify, and distribute — with one requirement:
-**the copyright notice and author attribution must be preserved in all copies.**
-
+Free to use, copy, modify, and distribute with attribution preserved.
 See [LICENSE](LICENSE) for full terms.
-
----
-
-## Author
-
-**Alberto Ramírez**
-Creator and sole implementer of the BETO Framework
-Four years of development: 2022–2026
-
-*"BETO formalizes the ignorance of an AI."*
