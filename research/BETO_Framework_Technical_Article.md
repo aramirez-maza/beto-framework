@@ -437,5 +437,5 @@ The framework, its templates, and BETO_EXECUTOR are available as open artifacts.
 ---
 
 *Correspondence: Alberto Ramírez*
-*Framework documentation and implementation available at: BETO_EXECUTOR source repository*
-*Framework version: BETO v4.2 (2026-03-07)*
+*Framework documentation and implementation available at: https://github.com/aramirez-maza/beto-framework*
+*Framework version: BETO v4.2 (March 2026)*

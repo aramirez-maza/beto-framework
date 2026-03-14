@@ -138,17 +138,48 @@ beto-framework/
 │       └── beto_state/                ← Live epistemic context engine
 │
 ├── research/
-│   └── BETO_Framework_Technical_Article.md   ← Technical article (manuscript)
+│   └── BETO_Framework_Technical_Article.md   ← Technical article (SSRN preprint ID: 6411618)
+│
+├── skills/
+│   └── beto-framework/                        ← Claude Skill — run BETO interactively
+│       ├── SKILL.md                           ← Skill entry point (install in Claude Code)
+│       └── references/                        ← All BETO templates loaded on demand
 │
 └── examples/
-    └── beto_executor_self_specification/      ← Complete cycle: BETO specifying itself
-        ├── PASO_0_EVALUACION.md
-        ├── BETO_CORE_DRAFT.md
-        ├── BETO_SYSTEM_GRAPH.md
-        ├── CIERRE_ASISTIDO.md
-        ├── MANIFEST_PROYECTO.md
-        └── GENERATOR_RULES_BETO_EXECUTOR.md
+    ├── beto_executor_self_specification/      ← Complete cycle: BETO specifying itself
+    │   ├── PASO_0_EVALUACION.md
+    │   ├── BETO_CORE_DRAFT.md
+    │   ├── BETO_SYSTEM_GRAPH.md
+    │   ├── CIERRE_ASISTIDO.md
+    │   ├── MANIFEST_PROYECTO.md
+    │   └── GENERATOR_RULES_BETO_EXECUTOR.md
+    └── gastos_personales/                     ← Complete cycle: personal expense tracker
+        ├── README.md                          ← Cycle summary and usage
+        ├── registro.py                        ← TRACE_VERIFIED
+        ├── consulta.py                        ← TRACE_VERIFIED
+        └── main.py                            ← TRACE_VERIFIED
 ```
+
+---
+
+## BETO Claude Skill
+
+`skills/beto-framework/` is a Claude Skill that runs the complete BETO v4.2 protocol interactively — no infrastructure required. Works with Claude Code and Claude.ai.
+
+### Installation
+
+```bash
+cp -r skills/beto-framework ~/.claude/skills/
+```
+
+### Usage
+
+```
+"corre BETO en esta idea: [your idea]"
+"run BETO on this idea: [your idea]"
+```
+
+Claude executes the full 11-step protocol, pausing at each human gate (G-1, G-2, G-3) for your approval. All BETO templates are loaded from `references/` on demand.
 
 ---
 
