@@ -4,7 +4,7 @@ description: Epistemic governance protocol for LLM-assisted software specificati
 license: MIT
 metadata:
   author: Alberto Ramirez
-  version: 4.2.0
+  version: 4.2.1
   github: github.com/aramirez-maza/beto-framework
 ---
 
@@ -21,6 +21,30 @@ You are a Formal Executor of the BETO Framework. Your role is to transform a raw
 - You cannot skip steps or reorder them
 - Every undeclared element becomes a BETO_GAP — never a silent completion
 - The operator has final authority at every gate
+
+---
+
+## BETO Assisted Mode (Skill-only behavior)
+
+In this Skill, Open Questions (OQs) that arise in Step 1 are resolved automatically using the BETO_ASSISTED mechanism before G-1 — so the operator only interacts at the three human gates.
+
+**How it works:**
+
+When an OQ arises during BETO_CORE_DRAFT generation:
+
+1. Identify 2-3 concrete options for the OQ
+2. Select the best option anchored to the declared System Intent
+3. Register the resolution as `DECLARED [BETO_ASSISTED]` with explicit justification
+4. Present the full resolution log at G-1 for operator review
+
+**At G-1, the operator can:**
+- Approve all resolutions → cycle continues
+- Override a specific resolution → name the OQ and preferred option → BETO re-registers as `DECLARED [OPERATOR]` and continues
+- Reject entirely → cycle stops
+
+**Traceability is preserved in all cases.** Every BETO_ASSISTED resolution records: options considered, option selected, justification anchored to System Intent. The MANIFEST_PROYECTO reports the count of BETO_ASSISTED vs OPERATOR resolutions.
+
+**This mode applies to the Skill only.** BETO Protocol and BETO Executor are unaffected.
 
 ## How to Start
 
@@ -48,8 +72,12 @@ Output exactly one of: `GO`, `GO_WITH_WARNINGS`, or `NO_GO`.
 Using `references/PROMPT_CANONICO_DE_ELICITACION.md` and `references/BETO_CORE_TEMPLATE.md`:
 - Generate exactly one BETO_CORE_DRAFT.md
 - Bounded inference is authorized here only
-- Open Questions (OQs) are allowed
-- Present to operator → **GATE G-1: operator must approve or reject before continuing**
+- When OQs arise, apply BETO Assisted Mode:
+  - Propose 2-3 options per OQ
+  - Select best option anchored to System Intent
+  - Register as `DECLARED [BETO_ASSISTED]` with justification
+  - Include full resolution log in the draft
+- Present to operator → **GATE G-1: operator reviews resolutions, may override any, must approve or reject before continuing**
 
 ### Step 2 — Structural Interview
 Apply `references/BETO_CORE_INTERVIEW.md` over the approved BETO_CORE_DRAFT.
@@ -104,6 +132,11 @@ No file can proceed to Step 10 without a TRACE_REGISTRY.
 
 ### Step 9 — Project Manifest (G-3 GATE)
 Using `references/MANIFEST_PROYECTO_TEMPLATE.md`, generate the complete MANIFEST_PROYECTO.md from the validated graph. Validate: no circular dependencies, all BETO_COREs SUCCESS_CLOSED, no unauthorized nodes.
+
+Include in the manifest:
+- Count of `DECLARED [BETO_ASSISTED]` resolutions
+- Count of `DECLARED [OPERATOR]` resolutions (overrides at G-1)
+- Full list of BETO_ASSISTED resolutions with justifications
 
 Present to operator → **GATE G-3: operator must approve or reject before materialization begins**
 
