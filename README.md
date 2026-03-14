@@ -44,6 +44,23 @@ BETO has three components with distinct purposes:
 
 ---
 
+## How to Use BETO
+
+The three components are independent — you can use any of them alone. But they work best in sequence:
+
+```
+IDEA_RAW
+  → BETO Skill      — explore the protocol conversationally,
+                       mature the idea, discover Open Questions
+                       before they become blockers
+  → BETO Executor   — materialize with deterministic guarantees,
+                       structural validation, and full TRACE_VERIFIED delivery
+```
+
+The Skill is not a prerequisite for the Executor. But users who run the Skill first arrive at the Executor with a clearer idea, fewer surprises at the gates, and a schema already thought through.
+
+Both execute the same protocol. The difference is the execution environment.
+
 ## Quickstart
 
 BETO Protocol can be executed manually, via the Executor (the reference implementation), or via the Skill (a Claude integration). See the full guide for both automated paths:
