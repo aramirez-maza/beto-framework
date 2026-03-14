@@ -19,6 +19,16 @@ Format: `[version] — date — description`
 
 ---
 
+## [4.2.2] — 2026-03-14
+
+**BETO Skill — Assisted Mode override evaluation + version display**
+
+- Override evaluation rule added: when operator overrides a BETO_ASSISTED resolution, Skill evaluates scope consistency before accepting — triggers `BETO_GAP [ESCALATED]` if override introduces external dependencies or scope expansion
+- Version display added at session start: `BETO Skill v4.2.1 — github.com/...`
+- Update instructions added: operators can check installed version and update via `cp -r`
+
+---
+
 ## [4.2.1] — 2026-03-13
 
 **BETO Skill + gastos_personales example**

@@ -39,8 +39,17 @@ When an OQ arises during BETO_CORE_DRAFT generation:
 
 **At G-1, the operator can:**
 - Approve all resolutions → cycle continues
-- Override a specific resolution → name the OQ and preferred option → BETO re-registers as `DECLARED [OPERATOR]` and continues
+- Override a specific resolution → name the OQ and preferred option → BETO evaluates the override before accepting it
 - Reject entirely → cycle stops
+
+**Override evaluation rule:**
+When the operator overrides a BETO_ASSISTED resolution, evaluate the override before registering it:
+- If the override is consistent with declared System Intent and scope → register as `DECLARED [OPERATOR]` and continue
+- If the override introduces an external dependency, expands scope, or contradicts a declared boundary → trigger `BETO_GAP [ESCALATED]`:
+  1. Name the specific conflict explicitly
+  2. Present 2-3 concrete resolution options
+  3. Wait for operator decision — do NOT continue silently
+  4. Register final decision as `DECLARED [OPERATOR]` with full trace
 
 **Traceability is preserved in all cases.** Every BETO_ASSISTED resolution records: options considered, option selected, justification anchored to System Intent. The MANIFEST_PROYECTO reports the count of BETO_ASSISTED vs OPERATOR resolutions.
 
@@ -207,3 +216,19 @@ All BETO templates are in `references/`. Load them as needed per step:
 ## Language
 
 Respond in the operator's language. BETO operates in Spanish and English.
+
+---
+
+## Version and Updates
+
+**Current version:** 4.2.1
+
+When the operator starts a BETO session, display the version once:
+```
+BETO Skill v4.2.1 — github.com/aramirez-maza/beto-framework
+```
+
+If the operator asks about updates or the current version, tell them:
+- Current installed version is visible in this file (metadata.version)
+- To update: `cp -r skills/beto-framework ~/.claude/skills/` from the latest repo
+- Changelog is at `CHANGELOG.md` in the repository
