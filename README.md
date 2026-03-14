@@ -81,6 +81,7 @@ BETO Protocol can be executed manually, via the Executor (the reference implemen
 | [docs/claims-and-boundaries.md](docs/claims-and-boundaries.md) | What "formal" means in BETO; guarantees and limits |
 | [docs/verification.md](docs/verification.md) | TRACE_VERIFIED, structural invariants, failure modes |
 | [docs/faq.md](docs/faq.md) | Three questions every engineer asks first |
+| [docs/related-work.md](docs/related-work.md) | How BETO relates to existing tools and practices |
 | [DOCUMENTACION_OFICIAL_BETO.md](DOCUMENTACION_OFICIAL_BETO.md) | Complete reference (Spanish) |
 | [BETO_INSTRUCTIVO.md](BETO_INSTRUCTIVO.md) | Operational executor protocol (LLM-facing) |
 
@@ -98,7 +99,8 @@ beto-framework/
 │   ├── architecture.md
 │   ├── claims-and-boundaries.md
 │   ├── verification.md
-│   └── faq.md
+│   ├── faq.md
+│   └── related-work.md
 ├── framework/                       ← 12 formal BETO templates
 ├── beto_executor/                   ← Automated pipeline (Python)
 │   └── src/
@@ -131,11 +133,14 @@ Two complete BETO cycles are included as reference:
 
 ---
 
-## Research
+## Theoretical Foundation
+
+The framework is grounded in a formal technical manuscript that defines the silent completion problem, positions BETO against existing governance approaches, and reports the empirical results of three complete specification cycles.
 
 **BETO Framework: An Epistemic Governance Protocol for LLM-Assisted Software Specification**
-Available as a preprint on SSRN (Abstract ID: 6411618, March 2026).
-Full manuscript: [research/BETO_Framework_Technical_Article.md](research/BETO_Framework_Technical_Article.md)
+Alberto Ramírez — Version 1.0, March 2026
+Preprint: [SSRN Abstract ID: 6411618](https://ssrn.com/abstract=6411618)
+Full text: [research/BETO_Framework_Technical_Article.md](research/BETO_Framework_Technical_Article.md)
 
 ---
 
