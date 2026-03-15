@@ -4,7 +4,7 @@ description: Epistemic governance protocol for LLM-assisted software specificati
 license: MIT
 metadata:
   author: Alberto Ramirez
-  version: 4.2.3
+  version: 4.2.4
   github: github.com/aramirez-maza/beto-framework
 ---
 
@@ -136,10 +136,12 @@ Run 9 mandatory validations (single root, acyclicity, no orphans, complete prove
   Declared:  [N] elements at G-1
   Assisted:  [N] OQs resolved [BETO_ASSISTED]
   Operator:  [N] overrides at G-1
-  BETO_GAPs: [N]
+  BETO_GAPs: [N]                        ← if N > 0, list each on next line:
+    → [TRACE_ID] [ESCALATED | RESOLVED: BETO_ASSISTED]
   Nodes:     [N] ([N] ROOT + [N] PARALLEL + [N] SUBBETO)
   ─────────────────────────────────────────────
   ```
+  If BETO_GAPs = 0, omit the indented lines entirely.
 - Present to operator → **GATE G-2: operator must approve or reject before continuing**
 
 ### Step 5 — Child BETO_COREs
@@ -180,10 +182,12 @@ Include in the manifest:
   IDs:       [N] authorized TRACE_REGISTRY entries
   Assisted:  [N] [BETO_ASSISTED]
   Operator:  [N] [OPERATOR]
-  BETO_GAPs: [N]
+  BETO_GAPs: [N]                        ← if N > 0, list each on next line:
+    → [TRACE_ID] [ESCALATED | RESOLVED: BETO_ASSISTED]
   OQs open:  0
   ─────────────────────────────────────────────
   ```
+  If BETO_GAPs = 0, omit the indented lines entirely.
 - Present to operator → **GATE G-3: operator must approve or reject before materialization begins**
 
 ### Step 10 — Materialization
@@ -258,11 +262,11 @@ Respond in the operator's language. BETO operates in Spanish and English.
 
 ## Version and Updates
 
-**Current version:** 4.2.3
+**Current version:** 4.2.4
 
 When the operator starts a BETO session, display the version once:
 ```
-BETO Skill v4.2.3 — github.com/aramirez-maza/beto-framework
+BETO Skill v4.2.4 — github.com/aramirez-maza/beto-framework
 ```
 
 If the operator asks about updates or the current version, tell them:

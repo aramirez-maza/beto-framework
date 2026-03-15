@@ -6,6 +6,18 @@ Format: `[version] — date — description`
 
 ---
 
+## [4.2.4] — 2026-03-15
+
+**BETO Skill — BETO_GAP detail in Gate Status Summary**
+
+- Gate Status Summary at G-2 and G-3 now lists each BETO_GAP by TRACE_ID and status when count > 0
+- Format: `→ [TRACE_ID] [ESCALATED | RESOLVED: BETO_ASSISTED]` — one line per gap, indented below the count
+- If BETO_GAPs = 0, format unchanged — no visual noise in clean cycles
+- Operator can now audit which gaps exist and their resolution state without opening the artifact
+- Version bumped to 4.2.4
+
+---
+
 ## [4.2.3] — 2026-03-15
 
 **BETO Skill — Gate Status Summary**
