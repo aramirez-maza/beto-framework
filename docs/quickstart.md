@@ -83,7 +83,7 @@ corre BETO en esta idea: [tu idea]
 
 BETO runs 11 steps. Three of them pause and require your decision:
 
-**Gate G-1 (after Step 1):** You will see a `BETO_CORE_DRAFT` — the root specification of your system. BETO will show you what it declared, what it inferred, and what it could not determine (Open Questions). You must either approve or reject. If you reject, BETO stops. If there are Open Questions, BETO will ask you to resolve them before proceeding.
+**Gate G-1 (after Step 1):** You will first see a Gate Status Summary — cycle name, step, elements declared, OQs resolved, overrides, and BETO_GAPs. Then you will see a `BETO_CORE_DRAFT` — the root specification of your system. BETO will show you what it declared, what it inferred, and what it could not determine (Open Questions). You must either approve or reject. If you reject, BETO stops. If there are Open Questions, BETO will ask you to resolve them before proceeding.
 
 **Gate G-2 (after Step 4):** You will see the `BETO_SYSTEM_GRAPH` — the frozen topology of your system: all nodes, their types (ROOT / PARALLEL / SUBBETO), and their relationships. This is the last point before BETO generates individual specifications for each node. Approve or reject.
 

@@ -6,6 +6,18 @@ Format: `[version] — date — description`
 
 ---
 
+## [4.2.3] — 2026-03-15
+
+**BETO Skill — Gate Status Summary**
+
+- Gate Status Summary added before each human gate (G-1, G-2, G-3)
+- Summary displays: cycle name, current step, declared elements, BETO_ASSISTED count, OPERATOR overrides, BETO_GAPs, node count (G-2/G-3), authorized files and IDs (G-3)
+- Provides cycle context snapshot before the operator reviews each artifact — reduces cognitive load and prevents drift in long sessions
+- `docs/quickstart.md` updated to mention Gate Status Summary
+- Version bumped to 4.2.3
+
+---
+
 ## [4.2.2] — 2026-03-14
 
 **Documentation: structural refactor**

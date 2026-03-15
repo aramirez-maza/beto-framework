@@ -4,7 +4,7 @@ description: Epistemic governance protocol for LLM-assisted software specificati
 license: MIT
 metadata:
   author: Alberto Ramirez
-  version: 4.2.1
+  version: 4.2.3
   github: github.com/aramirez-maza/beto-framework
 ---
 
@@ -86,6 +86,17 @@ Using `references/PROMPT_CANONICO_DE_ELICITACION.md` and `references/BETO_CORE_T
   - Select best option anchored to System Intent
   - Register as `DECLARED [BETO_ASSISTED]` with justification
   - Include full resolution log in the draft
+- Before presenting the draft, display the Gate Status Summary:
+  ```
+  ─── GATE G-1 ───────────────────────────────
+  Cycle:     [SYSTEM_NAME]
+  Step:      1 of 11
+  Declared:  [N] elements
+  Assisted:  [N] OQs resolved [BETO_ASSISTED]
+  Operator:  0 overrides
+  BETO_GAPs: 0
+  ─────────────────────────────────────────────
+  ```
 - Present to operator → **GATE G-1: operator reviews resolutions, may override any, must approve or reject before continuing**
 
 ### Step 2 — Structural Interview
@@ -117,7 +128,19 @@ Run 9 mandatory validations (single root, acyclicity, no orphans, complete prove
 - All pass → Graph status: VALIDATED
 - Any fail → Graph status: DRAFT → mandatory halt
 
-Present to operator → **GATE G-2: operator must approve or reject before continuing**
+- Before presenting the graph, display the Gate Status Summary:
+  ```
+  ─── GATE G-2 ───────────────────────────────
+  Cycle:     [SYSTEM_NAME]
+  Step:      4 of 11
+  Declared:  [N] elements at G-1
+  Assisted:  [N] OQs resolved [BETO_ASSISTED]
+  Operator:  [N] overrides at G-1
+  BETO_GAPs: [N]
+  Nodes:     [N] ([N] ROOT + [N] PARALLEL + [N] SUBBETO)
+  ─────────────────────────────────────────────
+  ```
+- Present to operator → **GATE G-2: operator must approve or reject before continuing**
 
 ### Step 5 — Child BETO_COREs
 For each authorized node in the validated graph, generate its BETO_CORE using the same process as Step 1, strictly bounded to that node's authorized scope. No new nodes can be created here.
@@ -147,7 +170,21 @@ Include in the manifest:
 - Count of `DECLARED [OPERATOR]` resolutions (overrides at G-1)
 - Full list of BETO_ASSISTED resolutions with justifications
 
-Present to operator → **GATE G-3: operator must approve or reject before materialization begins**
+- Before presenting the manifest, display the Gate Status Summary:
+  ```
+  ─── GATE G-3 ───────────────────────────────
+  Cycle:     [SYSTEM_NAME]
+  Step:      9 of 11
+  Nodes:     [N] ([N] ROOT + [N] PARALLEL + [N] SUBBETO)
+  Files:     [N] authorized source files
+  IDs:       [N] authorized TRACE_REGISTRY entries
+  Assisted:  [N] [BETO_ASSISTED]
+  Operator:  [N] [OPERATOR]
+  BETO_GAPs: [N]
+  OQs open:  0
+  ─────────────────────────────────────────────
+  ```
+- Present to operator → **GATE G-3: operator must approve or reject before materialization begins**
 
 ### Step 10 — Materialization
 Only after G-3 approval:
@@ -221,11 +258,11 @@ Respond in the operator's language. BETO operates in Spanish and English.
 
 ## Version and Updates
 
-**Current version:** 4.2.1
+**Current version:** 4.2.3
 
 When the operator starts a BETO session, display the version once:
 ```
-BETO Skill v4.2.1 — github.com/aramirez-maza/beto-framework
+BETO Skill v4.2.3 — github.com/aramirez-maza/beto-framework
 ```
 
 If the operator asks about updates or the current version, tell them:
