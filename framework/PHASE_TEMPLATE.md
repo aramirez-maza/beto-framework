@@ -164,4 +164,26 @@ STRICT RULE:
 
 ---
 
+## 9. IMPLEMENTATION_CONTRACT STATUS
+Declare whether this phase requires an IMPLEMENTATION_CONTRACT.
+
+Allowed values:
+- Required
+- Not required
+
+If `Required`, include:
+- Reason for activation
+- Reference to `IMPLEMENTATION_CONTRACT_<name>.md`
+- Which structural ambiguity remains unresolved by this PHASE document alone
+
+If `Not required`, include:
+- Brief justification that this PHASE document is sufficient for materialization governance
+
+STRICT RULE:
+- Do NOT embed the implementation contract contents here.
+- This section only records whether the extra layer is required for this phase.
+- A simple system may mark every phase as `Not required`.
+
+---
+
 ## END OF DOCUMENT

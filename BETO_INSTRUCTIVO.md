@@ -55,6 +55,8 @@ BETO_CORE_TEMPLATE.md
 
 PHASE_TEMPLATE.md
 
+IMPLEMENTATION_CONTRACT_TEMPLATE.md  ← requerido solo si aplica según REGLA IMPLEMENTATION_CONTRACT
+
 MANIFEST_BETO_TEMPLATE.md
 
 MANIFEST_PROYECTO_TEMPLATE.md
@@ -512,6 +514,95 @@ Salida:
 
 Documentos de fase completos para cada BETO.
 
+PASO 7.5 — IMPLEMENTATION_CONTRACT (CONDICIONAL)
+
+Propósito:
+
+Congelar la proyección estructural desde los documentos de fase hacia la materialización
+solo cuando la complejidad interna del BETO hace probable una variabilidad estructural
+no deseada entre implementaciones compatibles con el mismo PHASE set.
+
+Este artefacto:
+
+No reemplaza al BETO_CORE.
+
+No reemplaza a PHASE.
+
+No redefine intención, alcance, outputs ni fases.
+
+No crea arquitectura paralela.
+
+Su autoridad es exclusivamente estructural-operativa en la frontera
+entre PHASE y MATERIALIZATION.
+
+Cuándo se genera
+
+El IMPLEMENTATION_CONTRACT se genera solo si existe complejidad suficiente
+dentro del mismo BETO. Ejemplos autorizados:
+
+múltiples archivos por fase
+
+shared contracts entre fases
+
+más de un output materializable no trivial
+
+dependencia fina entre componentes dentro del mismo BETO
+
+riesgo real de variabilidad estructural entre implementaciones válidas
+
+Cuándo se omite
+
+Se omite cuando las PHASE ya bastan para gobernar la materialización
+sin ambigüedad estructural relevante.
+
+Regla de no sobreingeniería
+
+Un sistema simple no debe generar IMPLEMENTATION_CONTRACT.
+
+La existencia de varias fases no obliga por sí sola a generarlo.
+
+Si la estructura materializable puede derivarse de forma estable desde
+BETO_CORE + PHASE + MANIFEST sin variación relevante, este paso se omite.
+
+Cómo se genera
+
+Aplicar IMPLEMENTATION_CONTRACT_TEMPLATE.md.
+
+Puede generarse por BETO completo o por fase, según la menor unidad suficiente
+para congelar la estructura sin duplicar autoridad declarativa.
+
+El artefacto debe limitarse a:
+
+archivos o módulos autorizados
+
+ownership por fase o componente
+
+contratos compartidos relevantes
+
+dependencias finas
+
+orden fino de materialización
+
+límites estructurales de implementación
+
+No puede introducir:
+
+capacidades nuevas
+
+outputs nuevos
+
+fases nuevas
+
+dependencias externas no declaradas
+
+Salida:
+
+IMPLEMENTATION_CONTRACT_<name>.md
+
+o
+
+omisión explícita registrada en MANIFEST_BETO por no aplicar
+
 PASO 8 — GENERACIÓN DE MANIFEST INDIVIDUAL
 
 Para cada BETO_CORE:
@@ -533,6 +624,12 @@ SubBETO hijos.
 BETO_PARALELOS hijos si aplica según graph.
 
 Estado SUCCESS_CLOSED.
+
+Estado de IMPLEMENTATION_CONTRACT:
+
+existe
+
+u omitido por no aplicar
 
 Salida:
 
@@ -596,6 +693,10 @@ Todos los MANIFEST existan
 
 BETO_SYSTEM_GRAPH exista y esté VALIDATED
 
+Si existe IMPLEMENTATION_CONTRACT para ese BETO:
+
+debe existir y estar disponible antes de materializar
+
 Entonces:
 
 Planificar construcción secuencial basada en dependencias declaradas.
@@ -611,6 +712,12 @@ No ampliar alcance.
 No modificar especificaciones.
 
 La materialización se gobierna por los contratos, dependencias y estados declarados en los MANIFEST, en los BETO_CORE correspondientes y en el BETO_SYSTEM_GRAPH.
+
+Si existe IMPLEMENTATION_CONTRACT, también se gobierna por sus límites
+estructurales explícitos.
+
+El IMPLEMENTATION_CONTRACT no autoriza capacidades nuevas.
+Solo reduce la variabilidad estructural permitida durante la materialización.
 
 Si falta información:
 
@@ -863,6 +970,14 @@ Nomenclatura exacta de archivos de output; no derivable por lógica implícita n
 
 Cada archivo generado debe tener su nombre declarado en el BETO_CORE.
 
+Si la complejidad estructural del BETO supera la capacidad de gobierno suficiente
+de los documentos de fase, esos archivos y módulos deben congelarse además en
+IMPLEMENTATION_CONTRACT_<name>.md antes de materializar.
+
+El IMPLEMENTATION_CONTRACT no reemplaza esta declaración en BETO_CORE:
+
+la complementa cuando existe riesgo real de variabilidad estructural.
+
 Condiciones explícitas de cada llamada al gateway LLM; bajo qué condición se llama, con qué parámetros, qué retorna.
 
 Una llamada al gateway sin condición declarada es código muerto potencial.
@@ -876,6 +991,53 @@ Cualquier SubBETO identificado sin ellas carece de autoridad epistémica BETO.
 Un BETO_CORE generado con conflictos no resueltos en Sección 12 tiene estado INVÁLIDO y no puede avanzar al Paso 3.
 
 Un sistema materializado sin estas declaraciones tiene gaps no detectables hasta ejecución en producción.
+
+REGLA IMPLEMENTATION_CONTRACT
+
+IMPLEMENTATION_CONTRACT es un artefacto opcional entre PHASE y MATERIALIZATION.
+
+Su propósito es congelar la estructura materializable mínima necesaria
+cuando los documentos de fase no bastan para impedir divergencia estructural
+entre implementaciones válidas del mismo BETO.
+
+Autoridad:
+
+BETO_CORE sigue siendo autoridad semántica.
+
+PHASE sigue siendo autoridad lógica-operativa por fase.
+
+IMPLEMENTATION_CONTRACT, cuando existe, es autoridad estructural-operativa
+local para la materialización del BETO.
+
+Activación:
+
+Generar IMPLEMENTATION_CONTRACT solo si existe al menos una de estas condiciones:
+
+múltiples archivos por fase
+
+shared contracts entre fases
+
+más de un output materializable no trivial
+
+dependencia fina entre componentes dentro del mismo BETO
+
+riesgo real de variabilidad estructural entre implementaciones válidas
+
+Omisión:
+
+Si ninguna condición aplica, omitir IMPLEMENTATION_CONTRACT.
+
+La omisión no bloquea el ciclo.
+
+Debe quedar registrada explícitamente en MANIFEST_BETO.
+
+Restricción:
+
+IMPLEMENTATION_CONTRACT no puede duplicar PHASE como mini-arquitectura.
+
+No puede redefinir SYSTEM INTENT, scope, outputs, fases ni decisiones ya cerradas.
+
+Debe limitarse a congelar la proyección estructural hacia materialización.
 
 REGLA DE INICIATIVA CONTROLADA
 

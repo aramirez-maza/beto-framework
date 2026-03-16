@@ -71,11 +71,23 @@ Blocked reason
 None
 o explicación: [Qué dependencia falta, o qué falta por cerrar]
 
+## IMPLEMENTATION CONTRACT STATUS
+
+Implementation contract:
+[Present | Omitted - not applicable]
+
+Implementation contract path:
+[ruta al IMPLEMENTATION_CONTRACT_<name>.md | not_applicable]
+
+Activation basis:
+[por qué fue requerido | por qué se omitió]
+
 ## EVIDENCE
 
 Primary evidence
 - BETO_CORE file: [ruta]
 - TRACE_REGISTRY file: [ruta al TRACE_REGISTRY_<name>.md generado en Paso 6]
+- IMPLEMENTATION_CONTRACT file: [ruta o not_applicable]
 - Related outputs: [rutas]
 - Tests or validations: [rutas o no declarado]
 
