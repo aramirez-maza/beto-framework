@@ -20,11 +20,28 @@ class NodoBETO:
 
 @dataclass
 class OQ:
-    """Open Question — abierta o cerrada."""
+    """Open Question — abierta o cerrada.
+
+    Campos OSC (BETO v4.3 — Operational Semantic Closure Layer):
+      oq_type:           OQ_CONFIG | OQ_POLICY | OQ_EXECUTION | OQ_EXCEPTION |
+                         OQ_DATA_SEMANTICS | OQ_INTERFACE | OQ_OBSERVABILITY | NOT_CLASSIFIED
+      critical:          True si la OQ impacta comportamiento, decisión, flujo, tiempo,
+                         política, conflicto, excepción, datos, interfaces, riesgo,
+                         observabilidad o fallback.
+      execution_state:   DECLARED_EXECUTABLE | DECLARED_WITH_LIMITS | DECLARED_RAW | PENDING
+      execution_readiness_check: PASS_EXECUTABLE | PASS_WITH_LIMITS | FAIL_EXECUTIONAL_GAP | NOT_EVALUATED
+      requestion_count:  número de repreguntas realizadas (máximo = 2)
+    """
     id: str
     texto: str
     modo_cierre: str = ""    # BETO_ASSISTED | HUMAN | vacío si abierta
     resolucion: str = ""     # resumen de la resolución
+    # OSC fields — BETO v4.3
+    oq_type: str = "NOT_CLASSIFIED"   # tipología operativa
+    critical: bool = False             # es OQ crítica
+    execution_state: str = "PENDING"  # estado de ejecutabilidad
+    execution_readiness_check: str = "NOT_EVALUATED"  # resultado del check
+    requestion_count: int = 0         # repreguntas realizadas (max 2)
 
 
 @dataclass
@@ -53,6 +70,15 @@ class BETOState:
     # Gaps y gates
     gaps_activos: list[dict] = field(default_factory=list)
     decisiones_gate: list[dict] = field(default_factory=list)
+
+    # OSC — Operational Semantic Closure (BETO v4.3)
+    # Campos nuevos para la capa de cierre operativo semántico
+    executional_gap_count: int = 0           # número de BETO_GAP_EXECUTIONAL activos
+    requestion_history: list[dict] = field(default_factory=list)  # historial de repreguntas
+    operational_residue: list[dict] = field(default_factory=list) # ambigüedad residual aceptada
+    accepted_limits: list[dict] = field(default_factory=list)     # límites operativos declarados
+    # Resultados del gate G-2B (Operational Readiness Gate)
+    g2b_result: str = ""   # APPROVED_EXECUTABLE | APPROVED_WITH_LIMITS | BLOCKED_BY_EXECUTIONAL_GAPS | PENDING
 
     # Auditoría de extracción
     extraction_warnings: list[str] = field(default_factory=list)
@@ -134,6 +160,27 @@ class BETOState:
                     seen[gate] = dec
             for gate, dec in seen.items():
                 lines.append(f"  {gate}: {dec}")
+            lines.append("")
+
+        # OSC summary — BETO v4.3
+        if self.executional_gap_count > 0 or self.g2b_result:
+            lines.append("## OSC — OPERATIONAL SEMANTIC CLOSURE (BETO v4.3)")
+            if self.g2b_result:
+                lines.append(f"  Gate G-2B: {self.g2b_result}")
+            if self.executional_gap_count > 0:
+                lines.append(f"  BETO_GAP_EXECUTIONAL activos: {self.executional_gap_count}")
+            if self.accepted_limits:
+                lines.append(f"  Límites aceptados (DECLARED_WITH_LIMITS): {len(self.accepted_limits)}")
+            if self.operational_residue:
+                lines.append(f"  Ambigüedad residual registrada: {len(self.operational_residue)}")
+            lines.append("")
+
+        # OQs con ejecución crítica
+        oqs_raw = [oq for oq in self.oqs_abiertas if getattr(oq, "execution_state", "") == "DECLARED_RAW"]
+        if oqs_raw:
+            lines.append("## OQs BLOQUEANTES (DECLARED_RAW — requieren EXECUTION_READINESS_CHECK)")
+            for oq in oqs_raw:
+                lines.append(f"  {oq.id} [{getattr(oq, 'oq_type', '?')}]: {oq.texto[:100]}")
             lines.append("")
 
         if self.extraction_warnings:

@@ -6,6 +6,87 @@ Format: `[version] — date — description`
 
 ---
 
+## [4.3.0] — 2026-03-17
+
+**BETO Framework v4.3 — Operational Semantic Closure (OSC) Layer**
+
+Major extension: adds a new control layer over the quality of declared responses.
+BETO v4.2 blocked what was NOT_STATED. BETO v4.3 also validates what IS declared.
+
+**New states (refine DECLARED):**
+- `DECLARED_RAW` — response exists but is not operationally sufficient
+- `DECLARED_EXECUTABLE` — response is implementable without relevant inferences
+- `DECLARED_WITH_LIMITS` — response is usable with accepted controlled ambiguity
+
+**New gap type:**
+- `BETO_GAP_EXECUTIONAL` — response exists but is insufficient for consistent execution
+  (complements, does NOT replace, BETO_GAP)
+
+**EXECUTION_READINESS_CHECK:**
+- Mandatory validator for critical OQs
+- Evaluates 8 fields: alcance, trigger, input, output, constraint, fallback, exception, trazabilidad
+- Results: PASS_EXECUTABLE | PASS_WITH_LIMITS | FAIL_EXECUTIONAL_GAP
+
+**OQ Type classification (mandatory):**
+- 7 types: OQ_CONFIG | OQ_POLICY | OQ_EXECUTION | OQ_EXCEPTION | OQ_DATA_SEMANTICS | OQ_INTERFACE | OQ_OBSERVABILITY
+- OQ_POLICY, OQ_EXECUTION, OQ_EXCEPTION, OQ_DATA_SEMANTICS cannot close with free text
+
+**Step 6 upgraded — CIERRE_ASISTIDO_OPERATIVO:**
+- Promotes critical OQs to executable states
+- Generates EXECUTION_INTENT_MAP.md and EXECUTIONAL_GAP_REGISTRY.md
+- Anti-perfectionism policy: max_operational_requestions = 2
+
+**New gate G-2B — Operational Readiness Gate:**
+- APPROVED_EXECUTABLE | APPROVED_WITH_LIMITS | BLOCKED_BY_EXECUTIONAL_GAPS
+- Evaluated per unit in BETO_PARALELO — does NOT block globally
+
+**5 new templates:**
+- `OQ_RESPONSE_EXECUTABLE.md`
+- `EXECUTION_INTENT_MAP.md`
+- `CONFLICT_RESOLUTION_TABLE.md`
+- `AMBIGUITY_RESIDUE_REPORT.md`
+- `EXECUTIONAL_GAP_REGISTRY.md`
+
+**4 new OSC events registered in state_manager:**
+- `BETO_EXECUTIONAL_REQUESTION`
+- `BETO_GAP_EXECUTIONAL`
+- `BETO_DECLARATION_PROMOTED_TO_EXECUTABLE`
+- `BETO_DECLARATION_ACCEPTED_WITH_LIMITS`
+- `REGISTRAR_G2B_RESULT`
+
+**BETOState schema extended (backward-compatible):**
+- `executional_gap_count`, `requestion_history`, `operational_residue`, `accepted_limits`, `g2b_result`
+
+**OQ dataclass extended:**
+- `oq_type`, `critical`, `execution_state`, `execution_readiness_check`, `requestion_count`
+
+**BETO_PARALELO compatibility:**
+- OSC is local per unit — blocked unit does not block others
+- G-2B evaluated per unit with `unit_id` + `trace_id` on all OSC events
+
+**BETO_CORE_INTERVIEW.md:**
+- Section 13 added: OQ classification (OSC) — mandatory for all BETO_CORE
+
+**BETO_CORE_TEMPLATE.md:**
+- OQ format extended with: `oq_type`, `critical`, `execution_state`, `execution_readiness_check`
+
+**SKILL.md:**
+- Updated to v4.3.0
+- OSC states, OQ types, soft detection patterns documented
+- Step 6 updated with full CIERRE_ASISTIDO_OPERATIVO protocol
+
+**BETO_INSTRUCTIVO.md:**
+- OSC rules appended: OSC_ESTADOS, OSC_CIERRE_CRITICO, OSC_OQ_TYPE, OSC_EXECUTION_READINESS_CHECK,
+  OSC_BETO_GAP_EXECUTIONAL, OSC_ANTI_PERFECCIONISMO, OSC_CIERRE_ASISTIDO_OPERATIVO,
+  OSC_GATE_G2B, OSC_PARALELO, OSC_EVENTOS, OSC acceptance criteria
+
+**DOCUMENTACION_OFICIAL_BETO.md:**
+- Section 14 added: complete OSC documentation
+
+**Compatibility:** All v4.2 artifacts remain valid. All new OSC fields have safe defaults.
+
+---
+
 ## [4.2.4] — 2026-03-15
 
 **BETO Skill — BETO_GAP detail in Gate Status Summary**

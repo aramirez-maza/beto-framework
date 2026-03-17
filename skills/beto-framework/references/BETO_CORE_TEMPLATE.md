@@ -178,9 +178,13 @@ Formato de cada OQ (usar para todas las Open Questions):
 - **OQ-<ID>**: <texto de la pregunta>
   parent_oq: OQ-<N> (BETO_CORE_<nombre del padre>) | NONE
   section_origin: <sección del BETO_CORE_INTERVIEW que la generó>
+  oq_type: OQ_CONFIG | OQ_POLICY | OQ_EXECUTION | OQ_EXCEPTION | OQ_DATA_SEMANTICS | OQ_INTERFACE | OQ_OBSERVABILITY | NOT_CLASSIFIED
+  critical: SÍ | NO
+  execution_state: DECLARED_EXECUTABLE | DECLARED_WITH_LIMITS | DECLARED_RAW | PENDING
   status: OPEN | CLOSED
   resolution: <texto de la resolución si está CLOSED>
   source: HUMAN | BETO_ASSISTED | DELEGATED_TO_<nombre_subbeto>
+  execution_readiness_check: PASS_EXECUTABLE | PASS_WITH_LIMITS | FAIL_EXECUTIONAL_GAP | NOT_EVALUATED
 
 Do NOT resolve open questions in this document.
 

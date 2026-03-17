@@ -16,8 +16,13 @@ from .cli_presenter import presentar_gap, presentar_gate
 from .decision_capturer import capturar_decision, capturar_resolucion_gap
 from .retroceso_resolver import BETOGapEscalado, determinar_paso_retroceso
 
-# BETO-TRACE: BETO_GATES.SEC8.DECISION.GATES_G1_G2_G3_G4
-GATES_DECLARADOS = {"G-1", "G-2", "G-3", "G-4"}
+# BETO-TRACE: BETO_GATES.SEC8.DECISION.GATES_G1_G2_G2B_G3_G4
+# G-2B: Operational Readiness Gate — BETO v4.3 (actualizacion_beto.md §13)
+# Pregunta: ¿Las declaraciones críticas son ejecutables sin inferencias relevantes?
+# Resultados: APPROVED_EXECUTABLE | APPROVED_WITH_LIMITS | BLOCKED_BY_EXECUTIONAL_GAPS
+# G-2B se evalúa después del EXECUTION_READINESS_CHECK en el Paso 6 (CIERRE_ASISTIDO_OPERATIVO).
+# En BETO_PARALELO: se evalúa por unidad, NO bloquea globalmente.
+GATES_DECLARADOS = {"G-1", "G-2", "G-2B", "G-3", "G-4"}
 
 
 class GatesOperador:
@@ -170,4 +175,6 @@ class GatesOperador:
 
 
 def _gate_a_paso_num(gate_id: str) -> int:
-    return {"G-1": 1, "G-2": 4, "G-3": 9, "G-4": 10}.get(gate_id, 0)
+    # G-2B es el subgate de Operational Readiness dentro del Paso 6
+    # (CIERRE_ASISTIDO_OPERATIVO — BETO v4.3)
+    return {"G-1": 1, "G-2": 4, "G-2B": 6, "G-3": 9, "G-4": 10}.get(gate_id, 0)

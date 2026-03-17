@@ -1398,4 +1398,116 @@ restore EXEC-3A1B2C4D5E6F7G8H
 
 ---
 
-*Framework BETO v4.2 — Alberto Ramírez — 2026*
+## 14. BETO v4.3 — Operational Semantic Closure (OSC)
+
+### 14.1 El Problema que Resuelve
+
+BETO v4.2 garantiza separación entre DECLARED, NOT_STATED e INFERRED. Detecta lo no declarado y lo bloquea. Sin embargo, una OQ puede:
+
+- estar respondida
+- estar alineada con el SYSTEM INTENT
+- no violar BETO
+
+y aun así ser inútil para implementación real porque contiene respuestas blandas como "alta confianza", "usar estándar", "cuando sea necesario", "según contexto".
+
+BETO v4.3 añade control sobre la **calidad operativa** de lo declarado.
+
+### 14.2 Nuevos Estados
+
+| Estado | Significado |
+|--------|-------------|
+| `DECLARED_RAW` | Respuesta existe pero no es operativamente suficiente |
+| `DECLARED_EXECUTABLE` | Respuesta es implementable sin inferencias relevantes |
+| `DECLARED_WITH_LIMITS` | Respuesta es usable con ambigüedad controlada y aceptada |
+
+### 14.3 Tipología de OQs (obligatoria)
+
+Toda OQ debe clasificarse con exactamente uno de estos tipos:
+
+| Tipo | Aplica a |
+|------|---------|
+| `OQ_CONFIG` | Parámetros de configuración, umbrales, límites |
+| `OQ_POLICY` | Reglas de negocio, criterios de decisión, prioridades |
+| `OQ_EXECUTION` | Flujo, secuencias, triggers, orquestación |
+| `OQ_EXCEPTION` | Manejo de errores, fallback, casos de borde |
+| `OQ_DATA_SEMANTICS` | Significado de campos, formatos, convenciones |
+| `OQ_INTERFACE` | Contratos de E/S, APIs, formatos de intercambio |
+| `OQ_OBSERVABILITY` | Logging, métricas, trazas, monitoreo |
+
+**Regla:** OQ_POLICY, OQ_EXECUTION, OQ_EXCEPTION, OQ_DATA_SEMANTICS no pueden cerrarse con texto libre simple.
+
+### 14.4 EXECUTION_READINESS_CHECK
+
+Validador obligatorio para OQs críticas. Evalúa 8 campos:
+
+| Campo | Pregunta |
+|-------|---------|
+| `alcance` | ¿Sobre qué aplica exactamente? |
+| `trigger` | ¿Cuándo aplica? ¿Qué lo activa? |
+| `input` | ¿Qué datos o condiciones recibe? |
+| `output` | ¿Qué produce o decide? |
+| `constraint` | ¿Qué restricciones duras aplican? |
+| `fallback` | ¿Qué ocurre si no se puede aplicar? |
+| `exception` | ¿Qué casos de excepción existen? |
+| `trazabilidad` | ¿Hay ID de trazabilidad asignable? |
+
+Resultados posibles:
+
+| Resultado | Promoción |
+|-----------|-----------|
+| `PASS_EXECUTABLE` | → `DECLARED_EXECUTABLE` |
+| `PASS_WITH_LIMITS` | → `DECLARED_WITH_LIMITS` |
+| `FAIL_EXECUTIONAL_GAP` | → `DECLARED_RAW` + `BETO_GAP_EXECUTIONAL` |
+
+### 14.5 Gate G-2B — Operational Readiness Gate
+
+Subgate del Paso 6. No es un gate humano — es el resultado del EXECUTION_READINESS_CHECK.
+
+**Pregunta:** ¿Las declaraciones críticas son ejecutables sin inferencias relevantes?
+
+| Resultado | Condición |
+|-----------|-----------|
+| `APPROVED_EXECUTABLE` | Todas las OQs críticas en DECLARED_EXECUTABLE |
+| `APPROVED_WITH_LIMITS` | Alguna en DECLARED_WITH_LIMITS, ninguna en DECLARED_RAW |
+| `BLOCKED_BY_EXECUTIONAL_GAPS` | Una o más OQs críticas en DECLARED_RAW |
+
+En **BETO_PARALELO**: G-2B se evalúa por unidad — no bloquea globalmente.
+
+### 14.6 CIERRE_ASISTIDO_OPERATIVO
+
+El Paso 6 se actualiza de CIERRE_ASISTIDO a CIERRE_ASISTIDO_OPERATIVO.
+
+Artefactos generados:
+- `CIERRE_ASISTIDO_OPERATIVO.md` — artefacto principal con estados finales por OQ
+- `EXECUTION_INTENT_MAP.md` — mapa consolidado de ejecutabilidad
+- `EXECUTIONAL_GAP_REGISTRY.md` — registro de gaps execucionales (si hay)
+
+### 14.7 Política Anti-Perfeccionismo
+
+- No buscar completitud absoluta — buscar ejecutabilidad suficiente
+- Ambigüedad tolerable → `DECLARED_WITH_LIMITS` (no falla)
+- `max_operational_requestions = 2` por OQ crítica
+- Después de 2 repreguntas sin mejora: `DECLARED_RAW` permanente
+
+### 14.8 Templates Nuevos
+
+| Template | Propósito |
+|----------|-----------|
+| `OQ_RESPONSE_EXECUTABLE.md` | EXECUTION_READINESS_CHECK para una OQ individual |
+| `EXECUTION_INTENT_MAP.md` | Mapa consolidado de ejecutabilidad del sistema |
+| `CONFLICT_RESOLUTION_TABLE.md` | Resolución de conflictos operativos |
+| `AMBIGUITY_RESIDUE_REPORT.md` | Registro formal de ambigüedad residual aceptada |
+| `EXECUTIONAL_GAP_REGISTRY.md` | Registro centralizado de BETO_GAP_EXECUTIONAL |
+
+### 14.9 Compatibilidad
+
+BETO v4.3 es **completamente aditivo**:
+- El núcleo v4.2 no cambia
+- Los estados DECLARED, NOT_STATED, INFERRED no cambian
+- Los gates G-1, G-2, G-3, G-4 no cambian
+- Los ciclos v4.2 existentes son compatibles sin modificación
+- Los campos OSC en BETOState tienen defaults seguros (backward-compatible)
+
+---
+
+*Framework BETO v4.3 — Alberto Ramírez — 2026*

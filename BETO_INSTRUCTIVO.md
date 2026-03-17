@@ -1278,3 +1278,126 @@ OPERATIONAL_LESSONS.md existe y está cerrado por el operador.
 Sin el Paso 11 ejecutado, el sistema está construido pero el ciclo BETO no está cerrado.
 
 Este documento es la instrucción oficial para ejecutar el Framework BETO de forma determinista, controlada y sin expansión no autorizada, comenzando únicamente desde una IDEA_RAW elegible para creación, consolidando la topología del sistema mediante un BETO_SYSTEM_GRAPH validado, y cerrando el ciclo completo con el aprendizaje operacional del Paso 11.
+
+---
+
+EXTENSIÓN v4.3 — OPERATIONAL SEMANTIC CLOSURE (OSC)
+
+Esta sección extiende el Instructivo v4.2 con la capa OSC. No reemplaza nada del núcleo.
+
+REGLA OSC_ESTADOS
+
+Los estados derivados de DECLARED son:
+
+DECLARED_RAW
+  La respuesta existe pero no es operativamente suficiente para implementación
+  consistente sin inferencias relevantes. Aplica cuando la respuesta contiene
+  patrones blandos sin especificación ejecutable (alto, bajo, adecuado, estándar,
+  rápido, importante, cuando sea necesario, según convenga, si aplica).
+
+DECLARED_EXECUTABLE
+  La respuesta es implementable sin inferencias relevantes. Pasó el
+  EXECUTION_READINESS_CHECK con resultado PASS_EXECUTABLE.
+
+DECLARED_WITH_LIMITS
+  La respuesta es usable pero mantiene ambigüedad controlada y aceptada.
+  Pasó el EXECUTION_READINESS_CHECK con resultado PASS_WITH_LIMITS.
+  Los límites quedan registrados en AMBIGUITY_RESIDUE_REPORT.md.
+
+REGLA OSC_CIERRE_CRITICO
+
+Una OQ crítica no se considera cerrada solo por estar respondida.
+Debe cumplir DECLARED_EXECUTABLE o DECLARED_WITH_LIMITS.
+Si no: permanece en DECLARED_RAW y genera BETO_GAP_EXECUTIONAL.
+
+Una OQ es crítica si impacta: comportamiento del sistema, lógica de decisión,
+flujo, tiempo, políticas, conflictos, excepciones, datos, interfaces, riesgo,
+observabilidad, fallback.
+
+REGLA OSC_OQ_TYPE
+
+Toda OQ debe clasificarse con exactamente uno de:
+OQ_CONFIG | OQ_POLICY | OQ_EXECUTION | OQ_EXCEPTION |
+OQ_DATA_SEMANTICS | OQ_INTERFACE | OQ_OBSERVABILITY
+
+OQ_POLICY, OQ_EXECUTION, OQ_EXCEPTION, OQ_DATA_SEMANTICS:
+NO pueden cerrarse con texto libre simple.
+Deben producir OQ_RESPONSE_EXECUTABLE.md con EXECUTION_READINESS_CHECK.
+
+REGLA OSC_EXECUTION_READINESS_CHECK
+
+El EXECUTION_READINESS_CHECK evalúa 8 campos:
+alcance, trigger, input, output, constraint, fallback, exception, trazabilidad.
+
+Resultados:
+  PASS_EXECUTABLE    → DECLARED_EXECUTABLE
+  PASS_WITH_LIMITS   → DECLARED_WITH_LIMITS
+  FAIL_EXECUTIONAL_GAP → DECLARED_RAW + BETO_GAP_EXECUTIONAL
+
+REGLA OSC_BETO_GAP_EXECUTIONAL
+
+BETO_GAP_EXECUTIONAL complementa (no reemplaza) BETO_GAP.
+  BETO_GAP: la respuesta no existe (NOT_STATED)
+  BETO_GAP_EXECUTIONAL: la respuesta existe pero es insuficiente para ejecución consistente
+
+REGLA OSC_ANTI_PERFECCIONISMO
+
+No buscar completitud absoluta. Buscar ejecutabilidad suficiente.
+Ambigüedad tolerable → DECLARED_WITH_LIMITS (no FAIL).
+max_operational_requestions = 2 por OQ crítica.
+Después de 2 repreguntas sin mejora: DECLARED_RAW permanente hasta nueva declaración.
+
+REGLA OSC_CIERRE_ASISTIDO_OPERATIVO
+
+El Paso 6 pasa de CIERRE_ASISTIDO a CIERRE_ASISTIDO_OPERATIVO.
+Propósito extendido: promover OQs críticas a estados ejecutables.
+Genera adicionalmente: EXECUTION_INTENT_MAP.md y (si aplica) EXECUTIONAL_GAP_REGISTRY.md.
+
+REGLA OSC_GATE_G2B
+
+G-2B — Operational Readiness Gate (subgate del Paso 6):
+Pregunta: ¿Las declaraciones críticas son ejecutables sin inferencias relevantes?
+Resultados:
+  APPROVED_EXECUTABLE         — todas las OQs críticas en DECLARED_EXECUTABLE
+  APPROVED_WITH_LIMITS        — alguna en DECLARED_WITH_LIMITS, ninguna en DECLARED_RAW
+  BLOCKED_BY_EXECUTIONAL_GAPS — una o más OQs críticas en DECLARED_RAW
+
+G-2B no es un gate humano — es el resultado del EXECUTION_READINESS_CHECK.
+En BETO_PARALELO: G-2B se evalúa por unidad, NO bloquea globalmente.
+
+REGLA OSC_PARALELO
+
+Compatibilidad con BETO_PARALELO:
+  El cierre operativo es LOCAL a cada unidad — no global.
+  Cada unidad mantiene: OQs propias, execution_state propio, gaps propios,
+  historial propio, trazabilidad propia.
+  Una unidad BLOCKED_BY_EXECUTIONAL_GAPS no impide el avance de otras unidades.
+  Todo evento OSC debe incluir: unit_id y trace_id.
+  Agregación global es solo informativa (no bloquea ni desbloquea).
+
+REGLA OSC_EVENTOS
+
+Nuevos eventos del ciclo de estado (se registran en state_manager):
+  BETO_EXECUTIONAL_REQUESTION         — repregunta operativa sobre OQ crítica
+  BETO_GAP_EXECUTIONAL                — gap execucional detectado
+  BETO_DECLARATION_PROMOTED_TO_EXECUTABLE — OQ promovida a DECLARED_EXECUTABLE
+  BETO_DECLARATION_ACCEPTED_WITH_LIMITS   — OQ aceptada como DECLARED_WITH_LIMITS
+  REGISTRAR_G2B_RESULT                — resultado del gate G-2B
+
+TABLA DE TIPOS AUTORIZADOS POR SECCIÓN (extensión v4.3):
+
+Sección | TIPO              | Qué representa
+--------|-------------------|------------------------------------------------
+SEC9    | EXECUTIONAL_STATE | Estado OSC de una OQ (DECLARED_RAW / EXECUTABLE / WITH_LIMITS)
+SEC9    | OQ_TYPE           | Tipología operativa de la OQ (los 7 tipos OSC)
+
+CRITERIO DE ACEPTACIÓN OSC
+
+La implementación OSC es válida si:
+  - No se aceptan respuestas blandas como cierre suficiente de OQs críticas
+  - Existe separación real entre DECLARED_RAW y DECLARED_EXECUTABLE
+  - Existe BETO_GAP_EXECUTIONAL como tipo de evento registrable
+  - Existe EXECUTION_READINESS_CHECK con 8 campos evaluables
+  - Existe Gate G-2B con sus 3 posibles resultados
+  - Se preserva compatibilidad con BETO_PARALELO (cierre local por unidad)
+  - No hay ciclos infinitos (max_operational_requestions = 2 es el límite duro)

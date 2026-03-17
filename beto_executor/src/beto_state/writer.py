@@ -64,9 +64,11 @@ class BETOStateWriter:
         if paso >= 5:
             self._enrich_node_intents(state, warnings)
 
-        # — Paso 6+: OQs cerradas desde CIERRE_ASISTIDO —
+        # — Paso 6+: OQs cerradas desde CIERRE_ASISTIDO / CIERRE_ASISTIDO_OPERATIVO —
         if paso >= 6:
             self._update_from_cierre_asistido(state, warnings)
+            # OSC update — BETO v4.3
+            self._update_osc_from_executional_gap_registry(state, warnings)
 
         # — Siempre: gaps y gates desde state JSON —
         self._update_from_state_json(state, warnings)
@@ -101,6 +103,12 @@ class BETOStateWriter:
                     oqs_cerradas=oqs_c,
                     gaps_activos=raw.get("gaps_activos", []),
                     decisiones_gate=raw.get("decisiones_gate", []),
+                    # OSC fields — BETO v4.3 (backward-compatible defaults)
+                    executional_gap_count=raw.get("executional_gap_count", 0),
+                    requestion_history=raw.get("requestion_history", []),
+                    operational_residue=raw.get("operational_residue", []),
+                    accepted_limits=raw.get("accepted_limits", []),
+                    g2b_result=raw.get("g2b_result", ""),
                     extraction_warnings=raw.get("extraction_warnings", []),
                     generado_en_paso=raw.get("generado_en_paso", 0),
                     timestamp=raw.get("timestamp", ""),
@@ -192,9 +200,15 @@ class BETOStateWriter:
                     warnings.append(f"Nodo {nodo.id}: no se extrajo intent de {nodo.beto_core}")
 
     def _update_from_cierre_asistido(self, state: BETOState, warnings: list[str]) -> None:
-        content = self._read_artifact("CIERRE_ASISTIDO.md")
+        # BETO v4.3: buscar primero CIERRE_ASISTIDO_OPERATIVO.md (nuevo),
+        # si no existe fallback a CIERRE_ASISTIDO.md (compatibilidad v4.2)
+        content = self._read_artifact("CIERRE_ASISTIDO_OPERATIVO.md")
         if not content:
-            warnings.append("CIERRE_ASISTIDO.md no encontrado en cycle_dir")
+            content = self._read_artifact("CIERRE_ASISTIDO.md")
+        if not content:
+            warnings.append(
+                "CIERRE_ASISTIDO_OPERATIVO.md (ni CIERRE_ASISTIDO.md) no encontrado en cycle_dir"
+            )
             return
 
         data = extract_from_cierre_asistido(content, warnings)
@@ -216,6 +230,76 @@ class BETOStateWriter:
                 # Remover de abiertas si estaba allí
                 if oq.id in abiertas_ids:
                     state.oqs_abiertas = [o for o in state.oqs_abiertas if o.id != oq.id]
+
+    def _update_osc_from_executional_gap_registry(
+        self, state: BETOState, warnings: list[str]
+    ) -> None:
+        """
+        Lee EXECUTIONAL_GAP_REGISTRY.md y EXECUTION_INTENT_MAP.md si existen,
+        actualiza los campos OSC del BETOState (BETO v4.3).
+        Operación additive — nunca borra datos existentes.
+        """
+        import re
+
+        # Actualizar execution_state de las OQs desde los artefactos OSC disponibles
+        intent_map = self._read_artifact("EXECUTION_INTENT_MAP.md")
+        if intent_map:
+            # Extraer resultado del gate G-2B
+            g2b_match = re.search(
+                r"\*\*Resultado:\*\*\s*(APPROVED_EXECUTABLE|APPROVED_WITH_LIMITS|BLOCKED_BY_EXECUTIONAL_GAPS)",
+                intent_map,
+            )
+            if g2b_match and not state.g2b_result:
+                state.g2b_result = g2b_match.group(1)
+
+        # Actualizar desde EXECUTIONAL_GAP_REGISTRY
+        gap_registry = self._read_artifact("EXECUTIONAL_GAP_REGISTRY.md")
+        if gap_registry:
+            # Contar gaps activos (DECLARED_RAW que siguen bloqueando)
+            active_gaps = re.findall(r"DECLARED_RAW", gap_registry)
+            count = len(active_gaps)
+            if count > 0 or state.executional_gap_count == 0:
+                state.executional_gap_count = count
+
+        # Actualizar execution_state en OQs desde CIERRE_ASISTIDO_OPERATIVO
+        cierre_op = self._read_artifact("CIERRE_ASISTIDO_OPERATIVO.md")
+        if not cierre_op:
+            # Fallback: también puede llamarse CIERRE_ASISTIDO.md en repos anteriores
+            cierre_op = self._read_artifact("CIERRE_ASISTIDO.md")
+
+        if cierre_op:
+            # Detectar OQs promovidas a EXECUTABLE
+            for oq in state.oqs_cerradas:
+                oq_id = oq.id
+                # Buscar estado en el cierre
+                exec_match = re.search(
+                    rf"{re.escape(oq_id)}.*?execution_state:\s*(DECLARED_EXECUTABLE|DECLARED_WITH_LIMITS|DECLARED_RAW)",
+                    cierre_op,
+                    re.DOTALL,
+                )
+                if exec_match:
+                    oq.execution_state = exec_match.group(1)
+
+            # Contar límites aceptados
+            with_limits_count = len(
+                re.findall(r"DECLARED_WITH_LIMITS", cierre_op)
+            )
+            if with_limits_count > len(state.accepted_limits):
+                # Registrar en accepted_limits como resumen
+                import_ts = ""
+                try:
+                    from datetime import datetime, timezone
+                    import_ts = datetime.now(timezone.utc).isoformat()
+                except Exception:
+                    pass
+                if not state.accepted_limits:
+                    state.accepted_limits = [
+                        {
+                            "source": "CIERRE_ASISTIDO_OPERATIVO",
+                            "count": with_limits_count,
+                            "timestamp": import_ts,
+                        }
+                    ]
 
     def _update_from_state_json(self, state: BETOState, warnings: list[str]) -> None:
         """Lee el JSON del Gestor de Ciclo para gates y gaps."""

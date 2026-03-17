@@ -25,7 +25,15 @@ ARTEFACTOS_POR_PASO: dict[int, list[str]] = {
         "BETO_CORE_GATES_OPERADOR.md",
         "BETO_CORE_GESTOR_CICLO.md",
     ],
-    6: ["CIERRE_ASISTIDO.md"],
+    # BETO v4.3: CIERRE_ASISTIDO → CIERRE_ASISTIDO_OPERATIVO
+    # Artefactos nuevos del Operational Semantic Closure Layer.
+    # CIERRE_ASISTIDO.md se mantiene como alias para compatibilidad con ciclos v4.2.
+    # Nuevos ciclos generan CIERRE_ASISTIDO_OPERATIVO.md como artefacto principal.
+    6: [
+        "CIERRE_ASISTIDO_OPERATIVO.md",   # Nuevo en BETO v4.3 — reemplaza CIERRE_ASISTIDO.md
+        "EXECUTION_INTENT_MAP.md",         # Mapa consolidado de ejecutabilidad
+        "EXECUTIONAL_GAP_REGISTRY.md",     # Registro de gaps execucionales (condicional)
+    ],
     7: [
         "PHASE_ROOT_1_INPUT_ELIGIBILITY.md",
         "PHASE_ROOT_2_SPECIFICATION_PIPELINE.md",

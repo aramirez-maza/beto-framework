@@ -1,14 +1,15 @@
 ---
 name: beto-framework
-description: Epistemic governance protocol for LLM-assisted software specification and materialization. Runs the complete BETO v4.2 11-step process from a raw idea to a fully traceable, materializable specification. Use when the user says "run BETO on this idea", "corre BETO", "especifica este sistema con BETO", "apply BETO to", "quiero especificar un sistema", or wants to build software with formal traceability, operator-controlled gates, and zero silent completions.
+description: Epistemic governance protocol for LLM-assisted software specification and materialization. Runs the complete BETO v4.3 11-step process from a raw idea to a fully traceable, materializable specification. Use when the user says "run BETO on this idea", "corre BETO", "especifica este sistema con BETO", "apply BETO to", "quiero especificar un sistema", or wants to build software with formal traceability, operator-controlled gates, and zero silent completions.
 license: MIT
 metadata:
   author: Alberto Ramirez
-  version: 4.2.4
+  version: 4.3.0
   github: github.com/aramirez-maza/beto-framework
 ---
 
-# BETO Framework v4.2
+# BETO Framework v4.3
+## Operational Semantic Closure Layer
 
 BETO formalizes the ignorance of an AI.
 
@@ -144,15 +145,43 @@ Run 9 mandatory validations (single root, acyclicity, no orphans, complete prove
   If BETO_GAPs = 0, omit the indented lines entirely.
 - Present to operator → **GATE G-2: operator must approve or reject before continuing**
 
+> **Note (BETO v4.3):** Gate **G-2B** (Operational Readiness Gate) is evaluated during Step 6
+> as part of the CIERRE_ASISTIDO_OPERATIVO. It is not a human gate — it is the result of the
+> EXECUTION_READINESS_CHECK on all critical OQs. It determines whether the system is
+> APPROVED_EXECUTABLE, APPROVED_WITH_LIMITS, or BLOCKED_BY_EXECUTIONAL_GAPS.
+
 ### Step 5 — Child BETO_COREs
 For each authorized node in the validated graph, generate its BETO_CORE using the same process as Step 1, strictly bounded to that node's authorized scope. No new nodes can be created here.
 
-### Step 6 — Assisted Closure
-Close all BETO_COREs (root + all children):
-- No element can remain NOT_STATED
-- No Open Questions can remain open
-- Every resolution must leave an explicit trace
-- Result required: all BETO_COREs in SUCCESS_CLOSED state
+### Step 6 — Assisted Operational Closure (CIERRE_ASISTIDO_OPERATIVO)
+Close all BETO_COREs (root + all children) with operational semantic verification:
+
+**For each critical OQ** (type OQ_POLICY, OQ_EXECUTION, OQ_EXCEPTION, OQ_DATA_SEMANTICS):
+1. Run EXECUTION_READINESS_CHECK — evaluate: alcance, trigger, input, output, constraint, fallback, exception, trazabilidad
+2. Detect soft patterns: `alto`, `bajo`, `adecuado`, `estándar`, etc. → require operational validation
+3. Assign result:
+   - `PASS_EXECUTABLE` → `DECLARED_EXECUTABLE`
+   - `PASS_WITH_LIMITS` → `DECLARED_WITH_LIMITS` (accepted ambiguity, registered in AMBIGUITY_RESIDUE_REPORT)
+   - `FAIL_EXECUTIONAL_GAP` → `DECLARED_RAW` + `BETO_GAP_EXECUTIONAL`
+4. If FAIL: issue up to `max_operational_requestions = 2` typed re-questions to obtain executable specification
+5. After 2 re-questions with no improvement: OQ remains DECLARED_RAW — generate BETO_GAP_EXECUTIONAL
+
+**For non-critical OQs:** close with BETO_ASSISTED as in prior versions.
+
+**Gate G-2B — Operational Readiness Gate** (new in BETO v4.3):
+> "Are the critical declarations executable without relevant inferences?"
+- `APPROVED_EXECUTABLE`: all critical OQs are DECLARED_EXECUTABLE
+- `APPROVED_WITH_LIMITS`: some OQs are DECLARED_WITH_LIMITS, none DECLARED_RAW
+- `BLOCKED_BY_EXECUTIONAL_GAPS`: one or more critical OQs remain DECLARED_RAW
+
+**In BETO_PARALELO:** G-2B is evaluated per unit — a blocked unit does NOT block other units.
+
+Artifacts produced:
+- `CIERRE_ASISTIDO_OPERATIVO.md` — main closure artifact
+- `EXECUTION_INTENT_MAP.md` — consolidated executability map
+- `EXECUTIONAL_GAP_REGISTRY.md` — if BETO_GAP_EXECUTIONAL exist
+
+Result required: all BETO_COREs in SUCCESS_CLOSED state
 
 ### Step 7 — Phase Documents
 For each closed BETO_CORE, read Section 7 (Phase Architecture) and generate one PHASE document per declared phase using `references/PHASE_TEMPLATE.md`. Do not create phases not declared in the BETO_CORE.
@@ -236,6 +265,39 @@ There is no silent resolution.
 | NOT_STATED | Not declared; cannot be inferred | Blocks execution — register as Open Question |
 | INFERRED | Derived by model | Authorized only in Steps 0-1. Prohibited after G-1 approval |
 
+## OSC States — Operational Semantic Closure (BETO v4.3)
+
+These states refine DECLARED when a response exists but its operational quality must be evaluated:
+
+| State | Meaning | Effect |
+|---|---|---|
+| DECLARED_EXECUTABLE | Response is implementable without relevant inferences | Unblocked — proceeds to materialization |
+| DECLARED_WITH_LIMITS | Response is usable with accepted controlled ambiguity | Proceeds — limits are registered in AMBIGUITY_RESIDUE_REPORT |
+| DECLARED_RAW | Response exists but is not operationally sufficient | Blocked — generates BETO_GAP_EXECUTIONAL |
+
+**Rule:** A critical OQ is not considered closed just because it is answered.
+It must reach DECLARED_EXECUTABLE or DECLARED_WITH_LIMITS.
+If not, it remains DECLARED_RAW and generates BETO_GAP_EXECUTIONAL.
+
+### OQ Types (mandatory classification for all OQs)
+
+| Type | Applies to |
+|------|-----------|
+| OQ_CONFIG | Configuration parameters, thresholds, numeric limits |
+| OQ_POLICY | Business rules, decision criteria, priorities |
+| OQ_EXECUTION | Execution flow, sequences, triggers, orchestration |
+| OQ_EXCEPTION | Error handling, edge cases, fallback behavior |
+| OQ_DATA_SEMANTICS | Field meanings, value interpretation, data formats |
+| OQ_INTERFACE | I/O contracts, exchange formats, APIs |
+| OQ_OBSERVABILITY | Logging, metrics, traces, monitoring |
+
+**Rule:** OQ_POLICY, OQ_EXECUTION, OQ_EXCEPTION, OQ_DATA_SEMANTICS cannot be closed with simple free text.
+
+### Soft Response Detection
+
+These patterns do NOT invalidate a response but require operational validation:
+`alto`, `bajo`, `adecuado`, `estándar`, `rápido`, `importante`, `cuando sea necesario`, `según convenga`, `si aplica`
+
 ---
 
 ## References
@@ -244,13 +306,21 @@ All BETO templates are in `references/`. Load them as needed per step:
 
 - `references/PROMPT_CANONICO_DE_ELICITACION.md` — Steps 0-1
 - `references/BETO_CORE_TEMPLATE.md` — Steps 1, 5
-- `references/BETO_CORE_INTERVIEW.md` — Step 2
+- `references/BETO_CORE_INTERVIEW.md` — Step 2 (v4.3: includes Section 13 — OQ classification)
 - `references/BETO_SYSTEM_GRAPH_TEMPLATE.md` — Step 4
 - `references/PHASE_TEMPLATE.md` — Step 7
 - `references/MANIFEST_BETO_TEMPLATE.md` — Step 8
 - `references/MANIFEST_PROYECTO_TEMPLATE.md` — Step 9
 - `references/GENERATOR_RULES_TEMPLATE.md` — Step 8 (generator systems only)
 - `references/BETO_INSTRUCTIVO.md` — complete official protocol, consult for any rule clarification
+
+### OSC Templates (BETO v4.3 — Step 6)
+
+- `references/OQ_RESPONSE_EXECUTABLE.md` — EXECUTION_READINESS_CHECK for individual critical OQ
+- `references/EXECUTION_INTENT_MAP.md` — consolidated executability map for the system
+- `references/CONFLICT_RESOLUTION_TABLE.md` — operational conflict resolutions
+- `references/AMBIGUITY_RESIDUE_REPORT.md` — formal record of accepted tolerable ambiguity
+- `references/EXECUTIONAL_GAP_REGISTRY.md` — registry of all BETO_GAP_EXECUTIONAL in the cycle
 
 ---
 
@@ -262,14 +332,28 @@ Respond in the operator's language. BETO operates in Spanish and English.
 
 ## Version and Updates
 
-**Current version:** 4.2.4
+**Current version:** 4.3.0
 
 When the operator starts a BETO session, display the version once:
 ```
-BETO Skill v4.2.4 — github.com/aramirez-maza/beto-framework
+BETO Skill v4.3.0 — github.com/aramirez-maza/beto-framework
 ```
 
 If the operator asks about updates or the current version, tell them:
 - Current installed version is visible in this file (metadata.version)
 - To update: `cp -r skills/beto-framework ~/.claude/skills/` from the latest repo
 - Changelog is at `CHANGELOG.md` in the repository
+
+## What's new in BETO v4.3 — Operational Semantic Closure
+
+BETO v4.3 adds the OSC layer on top of v4.2 without changing the core:
+
+- **New states:** DECLARED_RAW, DECLARED_EXECUTABLE, DECLARED_WITH_LIMITS
+- **New gap type:** BETO_GAP_EXECUTIONAL (response exists but is insufficient)
+- **EXECUTION_READINESS_CHECK:** validates 8 fields on every critical OQ
+- **OQ classification:** mandatory oq_type for all Open Questions
+- **CIERRE_ASISTIDO_OPERATIVO:** Step 6 upgraded to promote critical OQs to executable states
+- **Gate G-2B:** Operational Readiness Gate — APPROVED_EXECUTABLE / APPROVED_WITH_LIMITS / BLOCKED_BY_EXECUTIONAL_GAPS
+- **5 new templates:** OQ_RESPONSE_EXECUTABLE, EXECUTION_INTENT_MAP, CONFLICT_RESOLUTION_TABLE, AMBIGUITY_RESIDUE_REPORT, EXECUTIONAL_GAP_REGISTRY
+- **Anti-perfectionism policy:** max_operational_requestions = 2; tolerable ambiguity → DECLARED_WITH_LIMITS
+- **BETO_PARALELO compatibility:** OSC is local per unit — blocked unit does not block others

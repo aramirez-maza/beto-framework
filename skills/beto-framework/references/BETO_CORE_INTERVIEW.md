@@ -449,4 +449,94 @@ Conflictos detectados: <lista o "ninguno">
 Si conflictos > 0: resolver con el operador antes de generar BETO_CORE_DRAFT.
 Si conflictos = 0: BETO_CORE_INTERVIEW COMPLETO — proceder al Paso 1.
 
+---
+
+SECCIÓN 13 — CLASIFICACIÓN DE OQs (OPERATIONAL SEMANTIC CLOSURE — BETO v4.3)
+
+(No elicita información nueva — clasifica las OQs de Sección 9 para el
+EXECUTION_READINESS_CHECK del Paso 6)
+
+REGLA: Esta sección es obligatoria para todos los BETO_CORE.
+Las OQs de tipo OQ_POLICY, OQ_EXECUTION, OQ_EXCEPTION, OQ_DATA_SEMANTICS
+NO pueden cerrarse con texto libre simple en el Paso 6.
+Deben producir un OQ_RESPONSE_EXECUTABLE.md con EXECUTION_READINESS_CHECK completo.
+
+P13.1 — Tipología de cada OQ
+
+Para cada OQ declarada en Sección 9 (P9.1), asignar exactamente uno de:
+
+OQ_CONFIG
+    Aplica a: parámetros de configuración, valores umbral, timeouts, límites numéricos.
+    Ejemplo: "¿Cuál es el timeout máximo de espera?"
+
+OQ_POLICY
+    Aplica a: reglas de negocio, comportamiento bajo condiciones específicas,
+    prioridades de decisión, criterios de aceptación.
+    Ejemplo: "¿Qué ocurre si dos reglas de prioridad aplican simultáneamente?"
+
+OQ_EXECUTION
+    Aplica a: flujo de ejecución, secuencia de pasos, condiciones de activación,
+    triggers, orquestación de componentes.
+    Ejemplo: "¿Cuándo se activa el componente de validación?"
+
+OQ_EXCEPTION
+    Aplica a: manejo de errores, casos de borde, comportamiento de fallback,
+    recuperación ante fallos.
+    Ejemplo: "¿Qué hace el sistema si el archivo de entrada no existe?"
+
+OQ_DATA_SEMANTICS
+    Aplica a: significado de campos, interpretación de valores, formatos de datos,
+    convenciones de representación.
+    Ejemplo: "¿Qué significa 'estado activo' para una orden?"
+
+OQ_INTERFACE
+    Aplica a: contratos de entrada/salida, formatos de intercambio, APIs,
+    protocolos de comunicación entre componentes.
+    Ejemplo: "¿En qué formato emite el sistema alertas al exterior?"
+
+OQ_OBSERVABILITY
+    Aplica a: logging, métricas, trazas, monitoreo, capacidades de diagnóstico.
+    Ejemplo: "¿Qué eventos deben registrarse en el log de auditoría?"
+
+Formato de clasificación:
+OQ-<ID>: <OQ_TYPE> | Crítica: SÍ/NO | Texto breve de la OQ
+
+P13.2 — Identificación de OQs críticas
+
+Una OQ es crítica si impacta alguno de:
+- comportamiento del sistema
+- lógica de decisión
+- flujo
+- tiempo
+- políticas
+- conflictos
+- excepciones
+- datos
+- interfaces
+- riesgo
+- observabilidad
+- fallback
+
+Listar todas las OQs críticas identificadas:
+<lista de OQ-IDs clasificadas como críticas, o "ninguna">
+
+P13.3 — OQs que requieren EXECUTION_READINESS_CHECK
+
+Por regla BETO v4.3, deben procesarse con OQ_RESPONSE_EXECUTABLE.md:
+- Toda OQ crítica de tipo OQ_POLICY
+- Toda OQ crítica de tipo OQ_EXECUTION
+- Toda OQ crítica de tipo OQ_EXCEPTION
+- Toda OQ crítica de tipo OQ_DATA_SEMANTICS
+
+Listar OQs que requerirán OQ_RESPONSE_EXECUTABLE en el Paso 6:
+<lista de OQ-IDs, o "ninguna">
+
+CIERRE DE CLASIFICACIÓN OSC:
+OQs clasificadas: <N>
+OQs críticas identificadas: <N>
+OQs que requieren EXECUTION_READINESS_CHECK: <N>
+Nota: El EXECUTION_READINESS_CHECK se ejecuta en el Paso 6 (CIERRE_ASISTIDO_OPERATIVO).
+
+---
+
 CIERRE
