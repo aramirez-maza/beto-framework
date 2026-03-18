@@ -1,8 +1,16 @@
 """
 BETO-TRACE: BETO_V45.SEC8.DECISION.DUAL_WRITE_PARITY
 
-Phase 1 parity validation: compare JSON files against SQLite records
-for critical objects. Detects divergences while both backends coexist.
+Parity validation: detect JSON records that are not in SQLite.
+
+Phase 1 semantics: both JSON and SQLite were written; divergences in
+either direction were reported.
+
+Phase 3 semantics: JSON files are no longer written at runtime.  The
+expected state is "DB has records, JSON has none".  Only records present
+in JSON but absent from DB represent a real problem (something was written
+to JSON but the DB write was missed).  Records present only in DB are the
+correct Phase 3 state and are NOT reported as divergences.
 
 Usage:
     from persistence.parity_check import check_parity, ParityReport
@@ -69,12 +77,9 @@ def _check_routing_decisions(beto_dir: Path, cycle_id: str, report: ParityReport
     db_ids = {row["decision_id"] for row in rows}
 
     only_json = json_ids - db_ids
-    only_db = db_ids - json_ids
 
     for rid in sorted(only_json):
         report.divergences.append(f"routing_decision {rid}: in JSON only (missing from DB)")
-    for rid in sorted(only_db):
-        report.divergences.append(f"routing_decision {rid}: in DB only (missing from JSON)")
 
 
 def _check_route_promotions(beto_dir: Path, cycle_id: str, report: ParityReport) -> None:
@@ -92,12 +97,9 @@ def _check_route_promotions(beto_dir: Path, cycle_id: str, report: ParityReport)
     db_ids = {row["promotion_id"] for row in rows}
 
     only_json = json_ids - db_ids
-    only_db = db_ids - json_ids
 
     for rid in sorted(only_json):
         report.divergences.append(f"route_promotion {rid}: in JSON only (missing from DB)")
-    for rid in sorted(only_db):
-        report.divergences.append(f"route_promotion {rid}: in DB only (missing from JSON)")
 
 
 def _check_snapshots(beto_dir: Path, cycle_id: str, report: ParityReport) -> None:
@@ -115,12 +117,9 @@ def _check_snapshots(beto_dir: Path, cycle_id: str, report: ParityReport) -> Non
     db_ids = {row["snapshot_id"] for row in rows}
 
     only_json = json_ids - db_ids
-    only_db = db_ids - json_ids
 
     for sid in sorted(only_json):
         report.divergences.append(f"snapshot {sid}: in JSON only (missing from DB)")
-    for sid in sorted(only_db):
-        report.divergences.append(f"snapshot {sid}: in DB only (missing from JSON)")
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────

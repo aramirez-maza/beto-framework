@@ -18,7 +18,6 @@ Responsibilities:
 
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -261,19 +260,11 @@ class ExecutionRouter:
     def _persist_decision(self, decision: RouteDecision) -> None:
         """
         BETO-TRACE: BETO_V44.SEC8.DECISION.ROUTING_CONFIG
-        BETO-TRACE: BETO_V45.SEC8.DECISION.DUAL_WRITE_PARITY
+        BETO-TRACE: BETO_V45.SEC8.DECISION.SQLITE_SOLE_BACKEND
 
-        Persist routing decision to .beto/routing/decisions/ (JSON)
-        and to SQLite (dual-write, Phase 1).
+        Phase 3: SQLite is the sole runtime backend for routing decisions.
+        JSON files are no longer written.
         """
-        decisions_dir = self.beto_dir / "routing" / "decisions"
-        decisions_dir.mkdir(parents=True, exist_ok=True)
-        path = decisions_dir / f"{decision.decision_id}.json"
-        path.write_text(
-            json.dumps(decision.to_dict(), ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-        # v4.5 dual-write — SQLite replica
         try:
             from persistence.writers.routing_writer import RoutingWriter
             RoutingWriter.write_decision(self.beto_dir, decision)
@@ -283,19 +274,11 @@ class ExecutionRouter:
     def _persist_promotion(self, promotion: RoutePromotion) -> None:
         """
         BETO-TRACE: BETO_V44.SEC8.DECISION.ROUTING_CONFIG
-        BETO-TRACE: BETO_V45.SEC8.DECISION.DUAL_WRITE_PARITY
+        BETO-TRACE: BETO_V45.SEC8.DECISION.SQLITE_SOLE_BACKEND
 
-        Persist route promotion to .beto/routing/promotions/ (JSON)
-        and to SQLite (dual-write, Phase 1).
+        Phase 3: SQLite is the sole runtime backend for route promotions.
+        JSON files are no longer written.
         """
-        promotions_dir = self.beto_dir / "routing" / "promotions"
-        promotions_dir.mkdir(parents=True, exist_ok=True)
-        path = promotions_dir / f"{promotion.promotion_id}.json"
-        path.write_text(
-            json.dumps(promotion.to_dict(), ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-        # v4.5 dual-write — SQLite replica
         try:
             from persistence.writers.routing_writer import RoutingWriter
             RoutingWriter.write_promotion(self.beto_dir, promotion)
