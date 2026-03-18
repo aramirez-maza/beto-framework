@@ -145,14 +145,18 @@ class StepExecutor:
         self.artifact_writer = artifact_writer
         self.templates_dir = templates_dir
 
-    def ejecutar_paso(self, paso: int, idea_raw: str) -> list[str]:
+    def ejecutar_paso(self, paso: int, idea_raw: str, route_type: str = "") -> list[str]:
         """
         BETO-TRACE: BETO_MOTOR_RAZ.SEC4.UNIT.PASO_EJECUCION
         BETO-TRACE: BETO_MOTOR_RAZ.SEC8.DECISION.CONTEXT_PER_STEP
+        BETO-TRACE: BETO_V44.SEC7.PHASE.PHASE_6_EXECUTOR_INTEGRATION
 
         Ejecuta el paso dado via LLM y escribe los artefactos generados.
         Para pasos con múltiples artefactos, hace una llamada LLM por artefacto.
         Retorna la lista de nombres de artefactos escritos.
+
+        route_type (v4.4): BETO_LIGHT_PATH | BETO_PARTIAL_PATH | BETO_FULL_PATH | ""
+        Controls context stratification via construir_contexto.
         """
         system_prompt = PROMPTS_POR_PASO.get(paso)
         if system_prompt is None:
@@ -165,13 +169,14 @@ class StepExecutor:
             nombre = nombres_artefactos[0]
             if paso == 2:
                 # Paso 2 — generación en dos llamadas para garantizar SECCIÓN 12
-                contenido = self._ejecutar_paso2_split(idea_raw, system_prompt)
+                contenido = self._ejecutar_paso2_split(idea_raw, system_prompt, route_type)
             elif paso == 4:
                 # Paso 4 — generación en dos llamadas para garantizar SECCIÓN 14
-                contenido = self._ejecutar_paso4_split(idea_raw, system_prompt)
+                contenido = self._ejecutar_paso4_split(idea_raw, system_prompt, route_type)
             else:
                 mensajes_usuario = construir_contexto(
-                    paso, idea_raw, self.artifact_writer.cycle_dir, self.templates_dir
+                    paso, idea_raw, self.artifact_writer.cycle_dir,
+                    self.templates_dir, route_type,
                 )
                 messages = [{"role": "system", "content": system_prompt}] + mensajes_usuario
                 response = self.client.chat.completions.create(
@@ -187,7 +192,8 @@ class StepExecutor:
             for nombre in nombres_artefactos:
                 print(f"    [Paso {paso}] Generando {nombre}...")
                 mensajes_usuario = construir_contexto(
-                    paso, idea_raw, self.artifact_writer.cycle_dir, self.templates_dir
+                    paso, idea_raw, self.artifact_writer.cycle_dir,
+                    self.templates_dir, route_type,
                 )
                 # Agregar instrucción específica para este artefacto
                 mensajes_usuario = mensajes_usuario + [
@@ -208,7 +214,7 @@ class StepExecutor:
 
         return escritos
 
-    def _ejecutar_paso2_split(self, idea_raw: str, system_prompt: str) -> str:
+    def _ejecutar_paso2_split(self, idea_raw: str, system_prompt: str, route_type: str = "") -> str:
         """
         BETO-TRACE: BETO_MOTOR_RAZ.SEC4.UNIT.PASO_EJECUCION
 
@@ -219,7 +225,7 @@ class StepExecutor:
         Llamada 2: SECCIÓN 12 usando SECCIÓN 1-11 como contexto
         """
         mensajes_usuario = construir_contexto(
-            2, idea_raw, self.artifact_writer.cycle_dir, self.templates_dir
+            2, idea_raw, self.artifact_writer.cycle_dir, self.templates_dir, route_type,
         )
 
         # — Llamada 1: SECCIÓN 1 a 11 —
@@ -262,7 +268,7 @@ class StepExecutor:
 
         return contenido_s1_s11 + "\n\n" + contenido_s12
 
-    def _ejecutar_paso4_split(self, idea_raw: str, system_prompt: str) -> str:
+    def _ejecutar_paso4_split(self, idea_raw: str, system_prompt: str, route_type: str = "") -> str:
         """
         BETO-TRACE: BETO_MOTOR_RAZ.SEC4.UNIT.PASO_EJECUCION
 
@@ -273,7 +279,7 @@ class StepExecutor:
         Llamada 2: Sección 14 usando Secciones 1-13 como contexto
         """
         mensajes_usuario = construir_contexto(
-            4, idea_raw, self.artifact_writer.cycle_dir, self.templates_dir
+            4, idea_raw, self.artifact_writer.cycle_dir, self.templates_dir, route_type,
         )
 
         # — Llamada 1: Secciones 1 a 13 —

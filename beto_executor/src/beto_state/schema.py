@@ -85,6 +85,35 @@ class BETOState:
     generado_en_paso: int = 0
     timestamp: str = ""
 
+    # Routing & Efficiency fields — BETO v4.4 (Execution Efficiency and Routing Layer)
+    # All new fields have safe defaults — backward-compatible with v4.3 state files.
+
+    # Active routing state
+    current_route_type: str = ""         # BETO_LIGHT_PATH | BETO_PARTIAL_PATH | BETO_FULL_PATH | ""
+    last_routing_decision_id: str = ""   # ID of the last ROUTING_DECISION_RECORD (RD-YYYY-NNNN)
+    route_promotion_count: int = 0       # Number of route promotions in this cycle
+    last_promotion_id: str = ""          # ID of the last ROUTE_PROMOTION_RECORD (RP-YYYY-NNNN)
+
+    # Snapshot tracking
+    active_snapshots: list[dict] = field(default_factory=list)
+    # Each entry: {"snapshot_id": "CS-...", "snapshot_type": "...", "validity_state": "VALID|INVALIDATED"}
+    invalidated_snapshots: list[dict] = field(default_factory=list)
+
+    # PROJECT_INDEX
+    project_index_path: str = ""         # Path to .beto/project_index.json
+    project_index_last_updated: str = "" # ISO 8601 timestamp
+
+    # MODEL_CALL_PLAN log (summary — full entries in EXECUTION_PERFORMANCE_LOG)
+    model_call_count: int = 0            # Total model calls in this cycle
+    model_call_log: list[dict] = field(default_factory=list)
+    # Each entry: {"call_id": "MCP-...", "route_type": "...", "call_status": "..."}
+
+    # Routing decision registry (summary — full records in .beto/routing/)
+    routing_decisions: list[dict] = field(default_factory=list)
+    # Each entry: {"decision_id": "RD-...", "route_selected": "...", "raw_score": float}
+    route_promotions: list[dict] = field(default_factory=list)
+    # Each entry: {"promotion_id": "RP-...", "transition": "...", "trigger": "..."}
+
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2, ensure_ascii=False)
 
@@ -187,6 +216,24 @@ class BETOState:
             lines.append("## EXTRACTION WARNINGS (campos no extraídos — ver artefacto completo)")
             for w in self.extraction_warnings:
                 lines.append(f"  ⚠ {w}")
+            lines.append("")
+
+        # Routing state — BETO v4.4
+        if self.current_route_type or self.route_promotion_count > 0:
+            lines.append("## ROUTING STATE (BETO v4.4)")
+            if self.current_route_type:
+                lines.append(f"  Ruta activa: {self.current_route_type}")
+            if self.last_routing_decision_id:
+                lines.append(f"  Última decisión: {self.last_routing_decision_id}")
+            if self.route_promotion_count > 0:
+                lines.append(f"  Promociones de ruta: {self.route_promotion_count}")
+            if self.last_promotion_id:
+                lines.append(f"  Última promoción: {self.last_promotion_id}")
+            if self.model_call_count > 0:
+                lines.append(f"  Llamadas al modelo: {self.model_call_count}")
+            active_valid = [s for s in self.active_snapshots if s.get("validity_state") == "VALID"]
+            if active_valid:
+                lines.append(f"  Snapshots activos válidos: {len(active_valid)}")
             lines.append("")
 
         return "\n".join(lines)

@@ -13,6 +13,7 @@ BETO-TRACE: BETO_EXECUTOR.SEC8.DECISION.GATES_NON_NEGOTIABLE
 """
 
 import shutil
+from datetime import datetime, timezone
 from pathlib import Path
 
 from openai import OpenAI
@@ -24,6 +25,7 @@ from gates_operador.decision_capturer import capturar_opcion_duplicado
 from gates_operador.gates import GatesOperador
 from motor_codigo.motor import MotorCodigo
 from motor_razonamiento.motor import MotorRazonamiento
+from execution_router import ExecutionRouter, ComplexityFactors
 
 
 class BETOExecutorRoot:
@@ -118,6 +120,37 @@ class BETOExecutorRoot:
         state_manager = StateManager(self.cycle_output_dir)
         gates = GatesOperador(state_manager, cycle_dir=cycle_dir)
 
+        # — v4.4: Initial routing at cycle start —
+        # BETO-TRACE: BETO_V44.SEC7.PHASE.PHASE_6_EXECUTOR_INTEGRATION
+        # BETO-TRACE: BETO_V44.SEC9.ROUTING_DECISION.RECORD
+        beto_dir = cycle_dir / ".beto"
+        execution_router = ExecutionRouter(cycle_id=ciclo_id, beto_dir=beto_dir)
+        initial_factors = self._estimate_complexity_factors(idea_raw)
+        routing_decision = execution_router.route(
+            factors=initial_factors,
+            subproblem_description=idea_raw[:200],
+            step_context="paso_0_eligibility",
+            executor_assigned="eligibility_executor",
+            trace_anchor=f"{ciclo_id}.SEC1.INTENT.CYCLE_START",
+            justification=(
+                "Initial routing at cycle start — heuristic estimate from idea_raw. "
+                "May be promoted during execution if scope expands."
+            ),
+        )
+        route_type = routing_decision.route_selected.value
+        print(f"[ROOT] Ruta inicial: {route_type} (score={routing_decision.raw_score:.1f})")
+        state_manager.aplicar_evento(
+            ciclo_id,
+            "ROUTING_DECISION_REGISTERED",
+            {
+                "decision_id": routing_decision.decision_id,
+                "route_selected": route_type,
+                "raw_score": routing_decision.raw_score,
+                "step_context": "paso_0_eligibility",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+
         # — PHASE 2: Specification Pipeline (Pasos 0–9) —
         # BETO-TRACE: BETO_EXECUTOR.SEC7.PHASE.PHASE_2_SPEC_PIPELINE
         # BETO-TRACE: BETO_EXECUTOR.SEC8.DECISION.TWO_MOTORS
@@ -130,6 +163,8 @@ class BETOExecutorRoot:
             state_manager=state_manager,
             gates_operador=gates,
             templates_dir=self.templates_dir,
+            execution_router=execution_router,
+            route_type=route_type,
         )
 
         # BETO-TRACE: BETO_EXECUTOR.SEC8.DECISION.GATES_NON_NEGOTIABLE
@@ -188,6 +223,23 @@ class BETOExecutorRoot:
         gates = GatesOperador(state_manager, cycle_dir=cycle_dir)
 
         if motor_destino == "MOTOR_RAZONAMIENTO":
+            # v4.4 — restore routing context for resumed cycle
+            beto_dir = cycle_dir / ".beto"
+            execution_router = ExecutionRouter(cycle_id=ciclo_id, beto_dir=beto_dir)
+            initial_factors = self._estimate_complexity_factors(idea_raw)
+            routing_decision = execution_router.route(
+                factors=initial_factors,
+                subproblem_description=idea_raw[:200],
+                step_context=f"paso_{paso_reanudacion}_reanudacion",
+                executor_assigned="eligibility_executor",
+                trace_anchor=f"{ciclo_id}.SEC1.INTENT.CYCLE_RESUME",
+                justification=(
+                    f"Routing restored at cycle resumption from paso {paso_reanudacion}."
+                ),
+            )
+            route_type = routing_decision.route_selected.value
+            print(f"[ROOT] Ruta reanudada: {route_type} (score={routing_decision.raw_score:.1f})")
+
             motor_raz = MotorRazonamiento(
                 ciclo_id=ciclo_id,
                 idea_raw=idea_raw,
@@ -197,6 +249,8 @@ class BETOExecutorRoot:
                 state_manager=state_manager,
                 gates_operador=gates,
                 templates_dir=self.templates_dir,
+                execution_router=execution_router,
+                route_type=route_type,
             )
             handoff_path = motor_raz.ejecutar(paso_inicio=paso_reanudacion)
         else:
@@ -222,3 +276,92 @@ class BETOExecutorRoot:
         result_dir = motor_cod.ejecutar()
         state_manager.marcar_finalizado(ciclo_id)
         return result_dir
+
+    def _estimate_complexity_factors(self, idea_raw: str) -> ComplexityFactors:
+        """
+        BETO-TRACE: BETO_V44.SEC7.PHASE.PHASE_6_EXECUTOR_INTEGRATION
+        BETO-TRACE: BETO_V44.SEC8.DECISION.ROUTING_THRESHOLDS
+
+        Heuristic estimation of complexity factors from idea_raw text.
+        This is a conservative estimate at cycle start — may be promoted via
+        ROUTE_PROMOTED during execution if scope expands (REGLA ROUTE_PROMOTION).
+
+        Not an invention: the BETO_FULL_PATH executor always runs the full
+        11-step protocol. The routing controls which context layers are loaded
+        and which snapshots are generated — not whether steps are skipped.
+        """
+        text = idea_raw.lower()
+
+        # ─── Signals ───────────────────────────────────────────────────────────
+        # Single-artifact signals (→ LIGHT)
+        single_keywords = {
+            "función", "funcion", "function", "método", "metodo", "method",
+            "clase", "class", "script", "archivo", "file",
+        }
+        # Modification signals (→ PARTIAL)
+        modification_keywords = {
+            "agrega", "añade", "aniade", "modifica", "actualiza", "integra",
+            "add", "append", "update", "modify", "integrate", "extend",
+            "logging", "log", "logs",
+        }
+        # Multi-component signals (→ FULL)
+        system_keywords = {
+            "sistema", "system", "arquitectura", "architecture",
+            "múltiples", "multiples", "múltiple", "multiple",
+            "componentes", "components", "módulos", "modulos", "modules",
+            "simulación", "simulacion", "simulation",
+        }
+
+        is_single = any(k in text for k in single_keywords)
+        is_modification = any(k in text for k in modification_keywords)
+        is_system = any(k in text for k in system_keywords)
+
+        # Prefer: system > modification > single
+        if is_system:
+            is_single = False
+            is_modification = False
+        elif is_modification:
+            is_single = False
+
+        # ─── Factor estimation ─────────────────────────────────────────────────
+        if is_single and not is_modification and not is_system:
+            # LIGHT candidate
+            num_outputs = 1
+            num_entities = 1
+            num_dependencies = 0
+            ambiguity_level = 1
+            need_for_graph = 0
+            oq_critical_count = 0
+            cross_module_scope = 0
+            lifecycle_scope = 0
+        elif is_modification and not is_system:
+            # PARTIAL candidate
+            num_outputs = 3
+            num_entities = 1
+            num_dependencies = 3
+            ambiguity_level = 1
+            need_for_graph = 0
+            oq_critical_count = 1
+            cross_module_scope = 0
+            lifecycle_scope = 0
+        else:
+            # FULL candidate (default — conservative)
+            num_outputs = 5
+            num_entities = 5
+            num_dependencies = 4
+            ambiguity_level = 2
+            need_for_graph = 1
+            oq_critical_count = 3
+            cross_module_scope = 1
+            lifecycle_scope = 1
+
+        return ComplexityFactors(
+            num_outputs=num_outputs,
+            num_entities=num_entities,
+            num_dependencies=num_dependencies,
+            ambiguity_level=ambiguity_level,
+            need_for_graph=need_for_graph,
+            oq_critical_count=oq_critical_count,
+            cross_module_scope=cross_module_scope,
+            lifecycle_scope=lifecycle_scope,
+        )

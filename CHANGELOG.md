@@ -6,6 +6,90 @@ Format: `[version] — date — description`
 
 ---
 
+## [4.4.0] — 2026-03-18
+
+**BETO Framework v4.4 — Execution Efficiency and Routing Layer**
+
+Major extension: adds internal routing, stratified context, persistent snapshots, and adaptive execution modes. BETO no longer requires a separate external skill surface for simple tasks — they are absorbed into the unified executor.
+
+**Internal routing system:**
+- `complexity_score` function with 8 weighted factors and deterministic thresholds
+- Three execution paths: `BETO_LIGHT_PATH` (0–5), `BETO_PARTIAL_PATH` (6–12), `BETO_FULL_PATH` (13+)
+- Default weights: w1=1, w2=1, w3=1, w4=2, w5=3, w6=2, w7=2, w8=2 (configurable, fixed defaults)
+- `ROUTING_DECISION_RECORD` — every routing decision is traceable, no silent decisions
+- `ROUTE_PROMOTION_RECORD` — every route promotion is traceable (LIGHT→PARTIAL→FULL)
+
+**Stratified context (3 layers):**
+- Layer A: STABLE_CORE_CONTEXT — instructions, rules, invariant templates (prefix-cacheable)
+- Layer B: CYCLE_CONTEXT — active BETO_CORE, current step, active OQs, routing state
+- Layer C: LOCAL_EXECUTION_CONTEXT — current file, diff, template, phase, OQ for sub-problem
+- Rule: every model call uses only the minimum required context (A + minimal B + C)
+
+**Persistent snapshots:**
+- `CYCLE_CONTEXT_SNAPSHOT` — cycle state at a point in time
+- `ACTIVE_OQ_SET` — compact set of OQs relevant to the current tramo
+- `LOCAL_EXECUTION_CONTEXT` — sub-problem specific context
+- `MATERIALIZATION_SCOPE` — exact scope of what to materialize in a tramo
+- All stored in `.beto/snapshots/` — invalidation rules formally defined
+
+**Operational artifacts:**
+- `MODEL_CALL_PLAN` — governs, executes, and logs every model call; includes cache eligibility and fallback strategy
+- `PROJECT_INDEX` (JSON, schema: `PROJECT_INDEX_SCHEMA.json`) — persistent artifact index in `.beto/project_index.json`; auto-updated by executor; manual reindex available
+- `EXECUTION_PERFORMANCE_LOG` — audit log of every model call; enables efficiency analysis
+
+**Execution mode policy:**
+- `EXECUTION_MODE_POLICY.md` — canonical definition of what each mode can and cannot do
+- 10 declared sub-executors under unified executor authority
+- Sub-executors cannot call each other without passing through the orchestrator
+
+**3-level cache strategy:**
+- PREFIX_CACHE: instructions, rules, invariant templates
+- SEMANTIC_CACHE: closed BETO_COREs, validated graphs, closed manifests
+- OPERATIONAL_CACHE: active snapshots, recent diffs, recent outputs, routing decisions
+
+**OSC local evaluation (BETO v4.3 compatibility):**
+- EXECUTION_READINESS_CHECK applied per OQ or per unit (not globally blocking)
+- G-2B result registered per unit in BETO_PARALELO
+- BETO_LIGHT_PATH triggers local OSC evaluation or promotes route if OQ is not closeable locally
+
+**12 new rules in BETO_INSTRUCTIVO.md:**
+- REGLA EXECUTION_PATH_SELECTION
+- REGLA MINIMAL_CONTEXT_EXECUTION
+- REGLA CONTEXT_STRATIFICATION
+- REGLA SNAPSHOT_INVALIDATION
+- REGLA MODEL_CALL_GOVERNANCE
+- REGLA LOCAL_OSC_EVALUATION
+- REGLA INCREMENTAL_MATERIALIZATION
+- REGLA PROJECT_INDEX_PERSISTENCE
+- REGLA NO_SEPARATE_SKILL_SURFACE
+- REGLA ROUTE_PROMOTION
+- REGLA LIGHT_MODE_SCOPE_CONTROL
+- REGLA EXECUTOR_UNIFICATION
+
+**9 new state manager events:**
+- `ROUTING_DECISION_REGISTERED`, `ROUTE_PROMOTED`, `SNAPSHOT_CREATED`, `SNAPSHOT_INVALIDATED`
+- `PROJECT_INDEX_UPDATED`, `REINDEX_PROJECT_INDEX`, `MODEL_CALL_PLANNED`, `MODEL_CALL_COMPLETED`
+- `PERFORMANCE_LOG_ENTRY`
+
+**11 new templates** (in `framework/` and `skills/beto-framework/references/`):
+- EXECUTION_ROUTER.md, ROUTING_DECISION_RECORD.md, ROUTE_PROMOTION_RECORD.md, EXECUTION_MODE_POLICY.md
+- CYCLE_CONTEXT_SNAPSHOT.md, ACTIVE_OQ_SET.md, LOCAL_EXECUTION_CONTEXT.md, MATERIALIZATION_SCOPE.md
+- MODEL_CALL_PLAN.md, PROJECT_INDEX_SCHEMA.json, EXECUTION_PERFORMANCE_LOG.md
+
+**New executor module:**
+- `beto_executor/src/execution_router/` — router.py, complexity_scorer.py, path_registry.py
+- `beto_executor/src/beto_state/schema.py` — extended with RouteDecision, ContextSnapshot, ProjectIndexEntry, ModelCallPlan, RoutingState dataclasses
+- `beto_executor/src/gestor_ciclo/state_manager.py` — 9 new v4.4 events added
+
+**SKILL.md updated to v4.4.0:**
+- Routing documentation, v4.4 template references, What's new section
+
+**DOCUMENTACION_OFICIAL_BETO.md:** Section 15 added — complete v4.4 documentation
+
+**Compatibility:** All v4.3 artifacts remain valid. All new schema fields have safe defaults. No existing field was removed or renamed.
+
+---
+
 ## [4.3.0] — 2026-03-17
 
 **BETO Framework v4.3 — Operational Semantic Closure (OSC) Layer**

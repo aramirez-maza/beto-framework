@@ -54,22 +54,35 @@ def construir_contexto(
     idea_raw: str,
     cycle_dir: Path,
     templates_dir: Path | None = None,
+    route_type: str = "",
 ) -> list[dict]:
     """
     BETO-TRACE: BETO_MOTOR_RAZ.SEC6.MODEL.CONTEXT_BUILDER
     BETO-TRACE: BETO_MOTOR_RAZ.SEC8.DECISION.CONTEXT_PER_STEP
+    BETO-TRACE: BETO_V44.SEC7.PHASE.PHASE_2_CONTEXT_SNAPSHOT
 
     Construye el contexto LLM para el paso dado.
     Orden: BETO_STATE (si existe) → templates del framework → IDEA_RAW → artefactos del ciclo.
     BETO_STATE es un resumen epistémico acumulado — reduce tokens en pasos avanzados.
     Los artefactos completos se mantienen (modo paralelo — BETO_STATE no reemplaza aún).
     NO es global acumulativo.
+
+    v4.4 — Context stratification (REGLA CONTEXT_STRATIFICATION):
+      BETO_LIGHT_PATH  → Capa B omitida (BETO_STATE no inyectado)
+      BETO_PARTIAL_PATH → Capa B minimal (BETO_STATE inyectado)
+      BETO_FULL_PATH   → Capa B full (BETO_STATE inyectado — comportamiento existente)
     """
     mensajes = []
 
-    # BETO_STATE: contexto epistémico destilado — solo inyectar desde Paso 2 en adelante
-    # (pasos 0-1 no tienen artefactos previos que resumir)
-    if paso >= 2:
+    # BETO_STATE: contexto epistémico destilado — Capa B
+    # BETO_LIGHT_PATH omite Capa B (REGLA MINIMAL_CONTEXT_EXECUTION — BETO v4.4)
+    # Para "" (sin routing declarado) se mantiene el comportamiento previo (compatible)
+    _load_beto_state = (
+        paso >= 2
+        and route_type != "BETO_LIGHT_PATH"
+    )
+
+    if _load_beto_state:
         beto_state_path = cycle_dir / "BETO_STATE.json"
         if beto_state_path.exists():
             try:

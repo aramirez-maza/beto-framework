@@ -1,15 +1,15 @@
 ---
 name: beto-framework
-description: Epistemic governance protocol for LLM-assisted software specification and materialization. Runs the complete BETO v4.3 11-step process from a raw idea to a fully traceable, materializable specification. Use when the user says "run BETO on this idea", "corre BETO", "especifica este sistema con BETO", "apply BETO to", "quiero especificar un sistema", or wants to build software with formal traceability, operator-controlled gates, and zero silent completions.
+description: Epistemic governance protocol for LLM-assisted software specification and materialization. Runs the complete BETO v4.4 11-step process from a raw idea to a fully traceable, materializable specification, with internal routing and adaptive context loading. Use when the user says "run BETO on this idea", "corre BETO", "especifica este sistema con BETO", "apply BETO to", "quiero especificar un sistema", or wants to build software with formal traceability, operator-controlled gates, and zero silent completions.
 license: MIT
 metadata:
   author: Alberto Ramirez
-  version: 4.3.0
+  version: 4.4.0
   github: github.com/aramirez-maza/beto-framework
 ---
 
-# BETO Framework v4.3
-## Operational Semantic Closure Layer
+# BETO Framework v4.4
+## Execution Efficiency and Routing Layer
 
 BETO formalizes the ignorance of an AI.
 
@@ -60,9 +60,15 @@ When the operator overrides a BETO_ASSISTED resolution, evaluate the override be
 
 When the user provides an idea, say:
 
-> "Running BETO v4.2. Starting with Step 0 — Semantic Eligibility Assessment."
+> "Running BETO v4.4. Starting with Step 0 — Semantic Eligibility Assessment."
 
 Then execute the steps in sequence.
+
+> **BETO v4.4 — Routing:** Before executing each sub-problem, evaluate complexity_score
+> and select BETO_LIGHT_PATH (0–5), BETO_PARTIAL_PATH (6–12), or BETO_FULL_PATH (13+).
+> Use stratified context (Layer A + B + C) rather than full global context per call.
+> Register every routing decision in ROUTING_DECISION_RECORD.
+> See EXECUTION_ROUTER.md and EXECUTION_MODE_POLICY.md for full specification.
 
 ---
 
@@ -322,6 +328,20 @@ All BETO templates are in `references/`. Load them as needed per step:
 - `references/AMBIGUITY_RESIDUE_REPORT.md` — formal record of accepted tolerable ambiguity
 - `references/EXECUTIONAL_GAP_REGISTRY.md` — registry of all BETO_GAP_EXECUTIONAL in the cycle
 
+### Routing & Efficiency Templates (BETO v4.4 — all steps)
+
+- `references/EXECUTION_ROUTER.md` — routing function, paths, sub-executors, escalation
+- `references/ROUTING_DECISION_RECORD.md` — traceable record of every routing decision
+- `references/ROUTE_PROMOTION_RECORD.md` — traceable record of every route promotion
+- `references/EXECUTION_MODE_POLICY.md` — mode capabilities, restrictions, and cache policy
+- `references/CYCLE_CONTEXT_SNAPSHOT.md` — persistent cycle context snapshot (Layer B)
+- `references/ACTIVE_OQ_SET.md` — compact active OQ set for current execution tramo
+- `references/LOCAL_EXECUTION_CONTEXT.md` — local sub-problem context (Layer C)
+- `references/MATERIALIZATION_SCOPE.md` — materialization scope per tramo
+- `references/MODEL_CALL_PLAN.md` — governs every model call
+- `references/PROJECT_INDEX_SCHEMA.json` — JSON schema for project artifact index
+- `references/EXECUTION_PERFORMANCE_LOG.md` — model call audit log
+
 ---
 
 ## Language
@@ -332,17 +352,34 @@ Respond in the operator's language. BETO operates in Spanish and English.
 
 ## Version and Updates
 
-**Current version:** 4.3.0
+**Current version:** 4.4.0
 
 When the operator starts a BETO session, display the version once:
 ```
-BETO Skill v4.3.0 — github.com/aramirez-maza/beto-framework
+BETO Skill v4.4.0 — github.com/aramirez-maza/beto-framework
 ```
 
 If the operator asks about updates or the current version, tell them:
 - Current installed version is visible in this file (metadata.version)
 - To update: `cp -r skills/beto-framework ~/.claude/skills/` from the latest repo
 - Changelog is at `CHANGELOG.md` in the repository
+
+## What's new in BETO v4.4 — Execution Efficiency and Routing Layer
+
+BETO v4.4 adds an internal routing and context stratification layer on top of v4.3 without changing the core:
+
+- **Internal routing:** complexity_score function selects BETO_LIGHT_PATH / BETO_PARTIAL_PATH / BETO_FULL_PATH
+- **Stratified context:** 3 layers (STABLE_CORE_CONTEXT + CYCLE_CONTEXT + LOCAL_EXECUTION_CONTEXT) — minimal context per call
+- **Snapshots:** CYCLE_CONTEXT_SNAPSHOT, ACTIVE_OQ_SET, LOCAL_EXECUTION_CONTEXT, MATERIALIZATION_SCOPE — persistent state between calls
+- **PROJECT_INDEX:** JSON index for locating artifacts without global re-exploration
+- **MODEL_CALL_PLAN:** governs every model call — context, cache eligibility, fallback, audit log
+- **Simple task absorption:** BETO_LIGHT_PATH absorbs tasks previously delegated to a separate skill
+- **Route promotion:** LIGHT→PARTIAL→FULL with mandatory traceable records
+- **OSC local evaluation:** G-2B per unit, not globally blocking
+- **10 specialized sub-executors:** all under unified executor authority
+- **11 new templates:** EXECUTION_ROUTER, ROUTING_DECISION_RECORD, ROUTE_PROMOTION_RECORD, EXECUTION_MODE_POLICY, CYCLE_CONTEXT_SNAPSHOT, ACTIVE_OQ_SET, LOCAL_EXECUTION_CONTEXT, MATERIALIZATION_SCOPE, MODEL_CALL_PLAN, PROJECT_INDEX_SCHEMA, EXECUTION_PERFORMANCE_LOG
+- **12 new rules** in BETO_INSTRUCTIVO.md
+- **Backward compatible** with all BETO v4.3 artifacts
 
 ## What's new in BETO v4.3 — Operational Semantic Closure
 

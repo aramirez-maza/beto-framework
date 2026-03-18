@@ -55,6 +55,8 @@ BETO_CORE_TEMPLATE.md
 
 PHASE_TEMPLATE.md
 
+IMPLEMENTATION_CONTRACT_TEMPLATE.md  ← requerido solo si aplica según REGLA IMPLEMENTATION_CONTRACT
+
 MANIFEST_BETO_TEMPLATE.md
 
 MANIFEST_PROYECTO_TEMPLATE.md
@@ -512,6 +514,95 @@ Salida:
 
 Documentos de fase completos para cada BETO.
 
+PASO 7.5 — IMPLEMENTATION_CONTRACT (CONDICIONAL)
+
+Propósito:
+
+Congelar la proyección estructural desde los documentos de fase hacia la materialización
+solo cuando la complejidad interna del BETO hace probable una variabilidad estructural
+no deseada entre implementaciones compatibles con el mismo PHASE set.
+
+Este artefacto:
+
+No reemplaza al BETO_CORE.
+
+No reemplaza a PHASE.
+
+No redefine intención, alcance, outputs ni fases.
+
+No crea arquitectura paralela.
+
+Su autoridad es exclusivamente estructural-operativa en la frontera
+entre PHASE y MATERIALIZATION.
+
+Cuándo se genera
+
+El IMPLEMENTATION_CONTRACT se genera solo si existe complejidad suficiente
+dentro del mismo BETO. Ejemplos autorizados:
+
+múltiples archivos por fase
+
+shared contracts entre fases
+
+más de un output materializable no trivial
+
+dependencia fina entre componentes dentro del mismo BETO
+
+riesgo real de variabilidad estructural entre implementaciones válidas
+
+Cuándo se omite
+
+Se omite cuando las PHASE ya bastan para gobernar la materialización
+sin ambigüedad estructural relevante.
+
+Regla de no sobreingeniería
+
+Un sistema simple no debe generar IMPLEMENTATION_CONTRACT.
+
+La existencia de varias fases no obliga por sí sola a generarlo.
+
+Si la estructura materializable puede derivarse de forma estable desde
+BETO_CORE + PHASE + MANIFEST sin variación relevante, este paso se omite.
+
+Cómo se genera
+
+Aplicar IMPLEMENTATION_CONTRACT_TEMPLATE.md.
+
+Puede generarse por BETO completo o por fase, según la menor unidad suficiente
+para congelar la estructura sin duplicar autoridad declarativa.
+
+El artefacto debe limitarse a:
+
+archivos o módulos autorizados
+
+ownership por fase o componente
+
+contratos compartidos relevantes
+
+dependencias finas
+
+orden fino de materialización
+
+límites estructurales de implementación
+
+No puede introducir:
+
+capacidades nuevas
+
+outputs nuevos
+
+fases nuevas
+
+dependencias externas no declaradas
+
+Salida:
+
+IMPLEMENTATION_CONTRACT_<name>.md
+
+o
+
+omisión explícita registrada en MANIFEST_BETO por no aplicar
+
 PASO 8 — GENERACIÓN DE MANIFEST INDIVIDUAL
 
 Para cada BETO_CORE:
@@ -533,6 +624,12 @@ SubBETO hijos.
 BETO_PARALELOS hijos si aplica según graph.
 
 Estado SUCCESS_CLOSED.
+
+Estado de IMPLEMENTATION_CONTRACT:
+
+existe
+
+u omitido por no aplicar
 
 Salida:
 
@@ -596,6 +693,10 @@ Todos los MANIFEST existan
 
 BETO_SYSTEM_GRAPH exista y esté VALIDATED
 
+Si existe IMPLEMENTATION_CONTRACT para ese BETO:
+
+debe existir y estar disponible antes de materializar
+
 Entonces:
 
 Planificar construcción secuencial basada en dependencias declaradas.
@@ -611,6 +712,12 @@ No ampliar alcance.
 No modificar especificaciones.
 
 La materialización se gobierna por los contratos, dependencias y estados declarados en los MANIFEST, en los BETO_CORE correspondientes y en el BETO_SYSTEM_GRAPH.
+
+Si existe IMPLEMENTATION_CONTRACT, también se gobierna por sus límites
+estructurales explícitos.
+
+El IMPLEMENTATION_CONTRACT no autoriza capacidades nuevas.
+Solo reduce la variabilidad estructural permitida durante la materialización.
 
 Si falta información:
 
@@ -863,6 +970,14 @@ Nomenclatura exacta de archivos de output; no derivable por lógica implícita n
 
 Cada archivo generado debe tener su nombre declarado en el BETO_CORE.
 
+Si la complejidad estructural del BETO supera la capacidad de gobierno suficiente
+de los documentos de fase, esos archivos y módulos deben congelarse además en
+IMPLEMENTATION_CONTRACT_<name>.md antes de materializar.
+
+El IMPLEMENTATION_CONTRACT no reemplaza esta declaración en BETO_CORE:
+
+la complementa cuando existe riesgo real de variabilidad estructural.
+
 Condiciones explícitas de cada llamada al gateway LLM; bajo qué condición se llama, con qué parámetros, qué retorna.
 
 Una llamada al gateway sin condición declarada es código muerto potencial.
@@ -876,6 +991,53 @@ Cualquier SubBETO identificado sin ellas carece de autoridad epistémica BETO.
 Un BETO_CORE generado con conflictos no resueltos en Sección 12 tiene estado INVÁLIDO y no puede avanzar al Paso 3.
 
 Un sistema materializado sin estas declaraciones tiene gaps no detectables hasta ejecución en producción.
+
+REGLA IMPLEMENTATION_CONTRACT
+
+IMPLEMENTATION_CONTRACT es un artefacto opcional entre PHASE y MATERIALIZATION.
+
+Su propósito es congelar la estructura materializable mínima necesaria
+cuando los documentos de fase no bastan para impedir divergencia estructural
+entre implementaciones válidas del mismo BETO.
+
+Autoridad:
+
+BETO_CORE sigue siendo autoridad semántica.
+
+PHASE sigue siendo autoridad lógica-operativa por fase.
+
+IMPLEMENTATION_CONTRACT, cuando existe, es autoridad estructural-operativa
+local para la materialización del BETO.
+
+Activación:
+
+Generar IMPLEMENTATION_CONTRACT solo si existe al menos una de estas condiciones:
+
+múltiples archivos por fase
+
+shared contracts entre fases
+
+más de un output materializable no trivial
+
+dependencia fina entre componentes dentro del mismo BETO
+
+riesgo real de variabilidad estructural entre implementaciones válidas
+
+Omisión:
+
+Si ninguna condición aplica, omitir IMPLEMENTATION_CONTRACT.
+
+La omisión no bloquea el ciclo.
+
+Debe quedar registrada explícitamente en MANIFEST_BETO.
+
+Restricción:
+
+IMPLEMENTATION_CONTRACT no puede duplicar PHASE como mini-arquitectura.
+
+No puede redefinir SYSTEM INTENT, scope, outputs, fases ni decisiones ya cerradas.
+
+Debe limitarse a congelar la proyección estructural hacia materialización.
 
 REGLA DE INICIATIVA CONTROLADA
 
@@ -1116,3 +1278,390 @@ OPERATIONAL_LESSONS.md existe y está cerrado por el operador.
 Sin el Paso 11 ejecutado, el sistema está construido pero el ciclo BETO no está cerrado.
 
 Este documento es la instrucción oficial para ejecutar el Framework BETO de forma determinista, controlada y sin expansión no autorizada, comenzando únicamente desde una IDEA_RAW elegible para creación, consolidando la topología del sistema mediante un BETO_SYSTEM_GRAPH validado, y cerrando el ciclo completo con el aprendizaje operacional del Paso 11.
+
+---
+
+EXTENSIÓN v4.3 — OPERATIONAL SEMANTIC CLOSURE (OSC)
+
+Esta sección extiende el Instructivo v4.2 con la capa OSC. No reemplaza nada del núcleo.
+
+REGLA OSC_ESTADOS
+
+Los estados derivados de DECLARED son:
+
+DECLARED_RAW
+  La respuesta existe pero no es operativamente suficiente para implementación
+  consistente sin inferencias relevantes. Aplica cuando la respuesta contiene
+  patrones blandos sin especificación ejecutable (alto, bajo, adecuado, estándar,
+  rápido, importante, cuando sea necesario, según convenga, si aplica).
+
+DECLARED_EXECUTABLE
+  La respuesta es implementable sin inferencias relevantes. Pasó el
+  EXECUTION_READINESS_CHECK con resultado PASS_EXECUTABLE.
+
+DECLARED_WITH_LIMITS
+  La respuesta es usable pero mantiene ambigüedad controlada y aceptada.
+  Pasó el EXECUTION_READINESS_CHECK con resultado PASS_WITH_LIMITS.
+  Los límites quedan registrados en AMBIGUITY_RESIDUE_REPORT.md.
+
+REGLA OSC_CIERRE_CRITICO
+
+Una OQ crítica no se considera cerrada solo por estar respondida.
+Debe cumplir DECLARED_EXECUTABLE o DECLARED_WITH_LIMITS.
+Si no: permanece en DECLARED_RAW y genera BETO_GAP_EXECUTIONAL.
+
+Una OQ es crítica si impacta: comportamiento del sistema, lógica de decisión,
+flujo, tiempo, políticas, conflictos, excepciones, datos, interfaces, riesgo,
+observabilidad, fallback.
+
+REGLA OSC_OQ_TYPE
+
+Toda OQ debe clasificarse con exactamente uno de:
+OQ_CONFIG | OQ_POLICY | OQ_EXECUTION | OQ_EXCEPTION |
+OQ_DATA_SEMANTICS | OQ_INTERFACE | OQ_OBSERVABILITY
+
+OQ_POLICY, OQ_EXECUTION, OQ_EXCEPTION, OQ_DATA_SEMANTICS:
+NO pueden cerrarse con texto libre simple.
+Deben producir OQ_RESPONSE_EXECUTABLE.md con EXECUTION_READINESS_CHECK.
+
+REGLA OSC_EXECUTION_READINESS_CHECK
+
+El EXECUTION_READINESS_CHECK evalúa 8 campos:
+alcance, trigger, input, output, constraint, fallback, exception, trazabilidad.
+
+Resultados:
+  PASS_EXECUTABLE    → DECLARED_EXECUTABLE
+  PASS_WITH_LIMITS   → DECLARED_WITH_LIMITS
+  FAIL_EXECUTIONAL_GAP → DECLARED_RAW + BETO_GAP_EXECUTIONAL
+
+REGLA OSC_BETO_GAP_EXECUTIONAL
+
+BETO_GAP_EXECUTIONAL complementa (no reemplaza) BETO_GAP.
+  BETO_GAP: la respuesta no existe (NOT_STATED)
+  BETO_GAP_EXECUTIONAL: la respuesta existe pero es insuficiente para ejecución consistente
+
+REGLA OSC_ANTI_PERFECCIONISMO
+
+No buscar completitud absoluta. Buscar ejecutabilidad suficiente.
+Ambigüedad tolerable → DECLARED_WITH_LIMITS (no FAIL).
+max_operational_requestions = 2 por OQ crítica.
+Después de 2 repreguntas sin mejora: DECLARED_RAW permanente hasta nueva declaración.
+
+REGLA OSC_CIERRE_ASISTIDO_OPERATIVO
+
+El Paso 6 pasa de CIERRE_ASISTIDO a CIERRE_ASISTIDO_OPERATIVO.
+Propósito extendido: promover OQs críticas a estados ejecutables.
+Genera adicionalmente: EXECUTION_INTENT_MAP.md y (si aplica) EXECUTIONAL_GAP_REGISTRY.md.
+
+REGLA OSC_GATE_G2B
+
+G-2B — Operational Readiness Gate (subgate del Paso 6):
+Pregunta: ¿Las declaraciones críticas son ejecutables sin inferencias relevantes?
+Resultados:
+  APPROVED_EXECUTABLE         — todas las OQs críticas en DECLARED_EXECUTABLE
+  APPROVED_WITH_LIMITS        — alguna en DECLARED_WITH_LIMITS, ninguna en DECLARED_RAW
+  BLOCKED_BY_EXECUTIONAL_GAPS — una o más OQs críticas en DECLARED_RAW
+
+G-2B no es un gate humano — es el resultado del EXECUTION_READINESS_CHECK.
+En BETO_PARALELO: G-2B se evalúa por unidad, NO bloquea globalmente.
+
+REGLA OSC_PARALELO
+
+Compatibilidad con BETO_PARALELO:
+  El cierre operativo es LOCAL a cada unidad — no global.
+  Cada unidad mantiene: OQs propias, execution_state propio, gaps propios,
+  historial propio, trazabilidad propia.
+  Una unidad BLOCKED_BY_EXECUTIONAL_GAPS no impide el avance de otras unidades.
+  Todo evento OSC debe incluir: unit_id y trace_id.
+  Agregación global es solo informativa (no bloquea ni desbloquea).
+
+REGLA OSC_EVENTOS
+
+Nuevos eventos del ciclo de estado (se registran en state_manager):
+  BETO_EXECUTIONAL_REQUESTION         — repregunta operativa sobre OQ crítica
+  BETO_GAP_EXECUTIONAL                — gap execucional detectado
+  BETO_DECLARATION_PROMOTED_TO_EXECUTABLE — OQ promovida a DECLARED_EXECUTABLE
+  BETO_DECLARATION_ACCEPTED_WITH_LIMITS   — OQ aceptada como DECLARED_WITH_LIMITS
+  REGISTRAR_G2B_RESULT                — resultado del gate G-2B
+
+TABLA DE TIPOS AUTORIZADOS POR SECCIÓN (extensión v4.3):
+
+Sección | TIPO              | Qué representa
+--------|-------------------|------------------------------------------------
+SEC9    | EXECUTIONAL_STATE | Estado OSC de una OQ (DECLARED_RAW / EXECUTABLE / WITH_LIMITS)
+SEC9    | OQ_TYPE           | Tipología operativa de la OQ (los 7 tipos OSC)
+
+CRITERIO DE ACEPTACIÓN OSC
+
+La implementación OSC es válida si:
+  - No se aceptan respuestas blandas como cierre suficiente de OQs críticas
+  - Existe separación real entre DECLARED_RAW y DECLARED_EXECUTABLE
+  - Existe BETO_GAP_EXECUTIONAL como tipo de evento registrable
+  - Existe EXECUTION_READINESS_CHECK con 8 campos evaluables
+  - Existe Gate G-2B con sus 3 posibles resultados
+  - Se preserva compatibilidad con BETO_PARALELO (cierre local por unidad)
+  - No hay ciclos infinitos (max_operational_requestions = 2 es el límite duro)
+
+─────────────────────────────────────────────────────────────────────────────
+REGLAS BETO v4.4 — EXECUTION EFFICIENCY AND ROUTING LAYER
+─────────────────────────────────────────────────────────────────────────────
+
+REGLA EXECUTION_PATH_SELECTION
+
+Antes de ejecutar cualquier subproblema, el executor DEBE evaluar complexity_score
+usando la función declarada en EXECUTION_ROUTER.md y seleccionar una de tres rutas:
+
+  BETO_LIGHT_PATH  → score 0–5
+  BETO_PARTIAL_PATH → score 6–12
+  BETO_FULL_PATH   → score 13+
+
+La función de complejidad y los pesos por defecto son:
+
+  complexity_score =
+    1*num_outputs + 1*num_entities + 1*num_dependencies +
+    2*ambiguity_level + 3*need_for_graph + 2*oq_critical_count +
+    2*cross_module_scope + 2*lifecycle_scope
+
+Los umbrales son configurables pero sus defaults son fijos, documentados y trazables.
+Toda selección de ruta debe registrarse en ROUTING_DECISION_RECORD.
+No existe selección de ruta silenciosa.
+
+─────────────────────────────────────────────────────────────────────────────
+
+REGLA MINIMAL_CONTEXT_EXECUTION
+
+Toda llamada al modelo debe incluir exclusivamente:
+
+  STABLE_CORE_CONTEXT (Capa A — siempre obligatoria)
+  +
+  CYCLE_CONTEXT mínimo requerido (Capa B — solo si route_type ≠ LIGHT)
+  +
+  LOCAL_EXECUTION_CONTEXT específico del subproblema (Capa C — siempre obligatoria)
+
+No se permite enviar contexto global completo si el subproblema puede resolverse
+localmente sin pérdida de autoridad semántica.
+Toda llamada debe estar gobernada por un MODEL_CALL_PLAN.
+
+─────────────────────────────────────────────────────────────────────────────
+
+REGLA CONTEXT_STRATIFICATION
+
+El contexto de ejecución está estratificado en tres capas:
+
+  CAPA A — STABLE_CORE_CONTEXT
+    Versión del instructivo, reglas nucleares BETO, reglas OSC, templates invariantes,
+    esquema estructural de salida, reglas del routing, contratos base del executor.
+    Esta capa es estable, reusable y prefix-cacheable.
+
+  CAPA B — CYCLE_CONTEXT
+    IDEA_RAW o artefacto raíz, BETO_CORE vigente, paso actual, OQs activas,
+    estado del ciclo, unidad actual (si aplica), path de ejecución, última decisión de routing.
+    Esta capa cambia con cada paso del ciclo.
+
+  CAPA C — LOCAL_EXECUTION_CONTEXT
+    Archivo actual, diff actual, template activo, phase activa, contract activo,
+    OQ activa, trace registry local, scope de materialización local,
+    snapshot aplicable al tramo actual.
+    Esta capa es específica del subproblema puntual.
+
+─────────────────────────────────────────────────────────────────────────────
+
+REGLA SNAPSHOT_INVALIDATION
+
+Un snapshot (CYCLE_CONTEXT_SNAPSHOT, ACTIVE_OQ_SET, LOCAL_EXECUTION_CONTEXT,
+MATERIALIZATION_SCOPE) debe invalidarse si cambia cualquiera de estos elementos:
+
+  - El BETO_CORE autorizado del ciclo activo
+  - Una OQ activa contenida en el snapshot
+  - La phase o contract asociado
+  - Una unidad estructural relevante
+  - Un artefacto fuente declarado como autoridad en source_artifacts
+  - El route_type del tramo actual (por promoción)
+  - El promotion_state de la ruta
+
+Un snapshot invalidado no puede usarse para resolver subproblemas.
+Debe regenerarse antes de continuar.
+
+─────────────────────────────────────────────────────────────────────────────
+
+REGLA MODEL_CALL_GOVERNANCE
+
+Toda llamada al modelo debe:
+  1. Tener un MODEL_CALL_PLAN generado antes de la llamada
+  2. Declarar explícitamente qué contexto global se excluye y por qué
+  3. Declarar los criterios de aceptación del output
+  4. Declarar la escalation_policy y fallback_strategy
+  5. Quedar logueada en EXECUTION_PERFORMANCE_LOG tras completarse
+  6. Verificar que todos los snapshots usados están en estado VALID
+
+El MODEL_CALL_PLAN debe ejecutarse, no solo documentarse.
+
+─────────────────────────────────────────────────────────────────────────────
+
+REGLA LOCAL_OSC_EVALUATION
+
+La capa OSC (BETO v4.3) opera localmente en BETO v4.4:
+
+  - EXECUTION_READINESS_CHECK se aplica por OQ crítica o por unidad local
+  - Gate G-2B se registra por unidad o subcontexto
+  - BETO_GAP_EXECUTIONAL se detecta localmente
+  - La agregación global es solo informativa
+
+En BETO_PARALELO, una unidad bloqueada no fuerza reevaluación global de las demás.
+
+Si una tarea en BETO_LIGHT_PATH activa una OQ crítica o criterio OSC relevante:
+  - Si el subproblema sigue siendo local → ejecutar evaluación local OSC
+  - Si no puede cerrarse bajo contexto mínimo → PROMOVER RUTA (ver REGLA ROUTE_PROMOTION)
+
+─────────────────────────────────────────────────────────────────────────────
+
+REGLA INCREMENTAL_MATERIALIZATION
+
+La materialización puede trabajar con contexto local (MATERIALIZATION_SCOPE)
+sin necesidad de recomponer el sistema entero entre tramos.
+
+La materialización no debe volver a cargar contexto de razonamiento global
+salvo que exista un bloqueo formal declarado (BETO_GAP que requiere razonamiento).
+
+La separación entre razonamiento y materialización es:
+
+  RAZONAMIENTO:
+    análisis semántico, entrevista, clasificación, cierre, graph,
+    manifiestos, validaciones estructurales, selección de ruta, promociones
+
+  MATERIALIZACIÓN:
+    generación de archivos, edición de artefactos locales, validación de
+    trazabilidad, verificación post-materialización, operaciones del modo liviano
+
+─────────────────────────────────────────────────────────────────────────────
+
+REGLA PROJECT_INDEX_PERSISTENCE
+
+El PROJECT_INDEX debe:
+  - Existir como archivo JSON persistente en .beto/project_index.json
+  - Seguir el schema declarado en PROJECT_INDEX_SCHEMA.json
+  - Actualizarse automáticamente por el executor en eventos de materialización
+  - Permitir re-indexación manual forzada mediante evento REINDEX_PROJECT_INDEX
+  - Registrar al menos: archivo, tipo, rol, phase, unidad, dependencias, trace_ids,
+    manifest, contract, estado de materialización, fecha de actualización,
+    route_relevance, execution_locality, snapshot_dependencies
+
+El PROJECT_INDEX es fuente operativa de localización, NO autoridad semántica.
+La autoridad semántica sigue en BETO_CORE, graph, manifests y contracts.
+
+─────────────────────────────────────────────────────────────────────────────
+
+REGLA NO_SEPARATE_SKILL_SURFACE
+
+No puede existir una pieza de ejecución separada fuera del executor principal
+que implemente lógica BETO duplicada o paralela.
+
+Toda lógica de ejecución, incluyendo la de tareas simples, debe vivir dentro
+del executor BETO unificado.
+
+BETO_LIGHT_PATH es una optimización interna del executor — no un subsistema autónomo.
+La diferencia entre modos es de alcance y carga contextual, no de autoridad epistemológica.
+
+Este invariante no puede ser violado por optimizaciones de rendimiento.
+
+─────────────────────────────────────────────────────────────────────────────
+
+REGLA ROUTE_PROMOTION
+
+Si durante una ejecución en BETO_LIGHT_PATH o BETO_PARTIAL_PATH se detecta que:
+  - Apareció una OQ crítica no absorbible localmente
+  - Se requiere BETO_SYSTEM_GRAPH no cargado
+  - Se requiere manifest nuevo
+  - El scope se volvió multiunidad
+  - La ambigüedad superó el umbral permitido para el modo actual
+  - La tarea ya no puede resolverse sin reconstrucción de autoridad estructural
+
+Entonces el route_promotion_evaluator debe registrar la promoción:
+  LIGHT → PARTIAL (si el subproblema puede cerrarse con CYCLE_CONTEXT)
+  PARTIAL → FULL  (si el subproblema requiere graph o reconstrucción global)
+  LIGHT → FULL    (si aplica directamente)
+
+La promoción debe quedar registrada en ROUTE_PROMOTION_RECORD.
+La promoción no puede ser silenciosa.
+La promoción debe describir qué disparó el cambio de ruta.
+
+─────────────────────────────────────────────────────────────────────────────
+
+REGLA LIGHT_MODE_SCOPE_CONTROL
+
+BETO_LIGHT_PATH no puede:
+  - Cargar BETO_SYSTEM_GRAPH completo
+  - Cargar MANIFEST_PROYECTO completo
+  - Cargar más de 2 artefactos estructurales globales sin justificación
+  - Inventar alcance más allá del subproblema declarado
+  - Ignorar trazabilidad cuando aplique
+  - Generar artefactos incompatibles con el núcleo
+
+BETO_LIGHT_PATH puede:
+  - Resolver tareas simples de una sola pieza con salida puntual
+  - Absorber tareas antes delegadas a un skill externo
+  - Cargar CYCLE_CONTEXT mínimo si el subproblema lo requiere
+  - Ejecutar evaluación local OSC si la OQ sigue siendo local
+
+─────────────────────────────────────────────────────────────────────────────
+
+REGLA EXECUTOR_UNIFICATION
+
+Todos los modos de ejecución y todos los subejecutores deben vivir bajo
+el mismo executor BETO, compartiendo:
+  - Reglas nucleares de no invención
+  - Trazabilidad completa
+  - Logging de auditoría (EXECUTION_PERFORMANCE_LOG)
+  - Versión del framework
+  - Política de no invención
+  - Compatibilidad con OSC (BETO v4.3)
+
+Los subejecutores no pueden llamarse entre sí sin pasar por el orquestador central.
+
+Subejecutores declarados en BETO v4.4:
+  eligibility_executor, interview_executor, closure_executor, osc_executor,
+  materialization_executor, verification_executor, beto_light_executor,
+  beto_partial_executor, beto_full_executor, route_promotion_evaluator
+
+─────────────────────────────────────────────────────────────────────────────
+
+Nuevos eventos del ciclo de estado v4.4 (se registran en state_manager):
+
+  ROUTING_DECISION_REGISTERED    — decisión de routing seleccionada y registrada
+  ROUTE_PROMOTED                 — promoción de ruta registrada
+  SNAPSHOT_CREATED               — snapshot creado (con tipo: CS, AQ, LC, MS)
+  SNAPSHOT_INVALIDATED           — snapshot invalidado con razón
+  PROJECT_INDEX_UPDATED          — PROJECT_INDEX actualizado por materialización
+  REINDEX_PROJECT_INDEX          — re-indexación manual disparada por operador
+  MODEL_CALL_PLANNED             — MODEL_CALL_PLAN creado antes de llamada
+  MODEL_CALL_COMPLETED           — llamada al modelo completada (con call_id)
+  PERFORMANCE_LOG_ENTRY          — entrada registrada en EXECUTION_PERFORMANCE_LOG
+
+TABLA DE TIPOS AUTORIZADOS POR SECCIÓN (extensión v4.4):
+
+Sección | TIPO                    | Qué representa
+--------|-------------------------|-----------------------------------------------
+SEC7    | ROUTING_TEMPLATE        | Template de la capa de routing v4.4
+SEC7    | SNAPSHOT_TEMPLATE       | Template del sistema de snapshots v4.4
+SEC7    | OPERATIONAL_TEMPLATE    | Template de artefactos operativos v4.4
+SEC8    | ROUTING_CONFIG          | Configuración de routing (umbrales, pesos)
+SEC8    | EXECUTOR_MODULE         | Módulo del executor Python
+SEC9    | ROUTING_DECISION        | Decisión de routing registrada
+SEC9    | ROUTE_PROMOTION         | Promoción de ruta registrada
+
+CRITERIO DE ACEPTACIÓN V4.4
+
+La implementación v4.4 es válida si:
+  - El routing decide correctamente entre los tres paths según complexity_score
+  - Las tareas simples se resuelven dentro del executor sin skill separado
+  - El contexto por llamada se reduce sin pérdida de autoridad semántica
+  - El executor opera por tramos y no recompone el sistema entero innecesariamente
+  - OSC puede evaluarse localmente sin bloqueo global
+  - PROJECT_INDEX permite localizar unidades y artefactos sin exploración global
+  - MODEL_CALL_PLAN deja trazabilidad operativa de cada llamada
+  - La materialización puede trabajar con contexto local
+  - Las promociones de ruta quedan registradas y justificadas
+  - No se rompe compatibilidad con BETO v4.3
+  - No se relajan reglas de no invención
+  - Se mantiene trazabilidad completa
+  - No aparece una nueva superficie de mantenimiento separada del executor principal

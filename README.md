@@ -4,7 +4,7 @@
 
 BETO is an epistemic governance protocol for LLM-assisted software specification and materialization. It enforces a formal boundary between what the operator has declared and what the model has assumed — preventing the silent completion problem that makes AI-generated software unauditable.
 
-**Version:** 4.2 (March 2026) · **Author:** Alberto Ramírez · **License:** MIT
+**Version:** 4.4.0 (March 2026) · **Author:** Alberto Ramírez · **License:** MIT
 
 ---
 
@@ -38,9 +38,9 @@ BETO has three components with distinct purposes:
 
 **BETO Protocol** — The 11-step governance process, from raw idea to traceable code. Defines the epistemic rules, the BETO_GAP event protocol, the TRACE_REGISTRY mechanism, and the three human gates (G-1, G-2, G-3) that give the operator full authority over topology, specification, and materialization. This is the core of the framework — the others implement it.
 
-**BETO Executor** — An automated Python pipeline that runs the full BETO Protocol using two LLM backends: a reasoning motor (Steps 0–9, tested with Claude Sonnet) and a code motor (Step 10, tested with Qwen-Coder via vLLM). Requires Python 3.11+, an OpenAI-compatible API, and optionally a local code model.
+**BETO Executor** — An automated Python pipeline that runs the full BETO Protocol. Includes an internal routing layer (v4.4) that selects the appropriate execution mode based on sub-problem complexity — `BETO_LIGHT_PATH` for simple tasks, `BETO_PARTIAL_PATH` for localized work within an existing cycle, and `BETO_FULL_PATH` for complete systems and architecture. Uses a reasoning motor (Steps 0–9, tested with Claude Sonnet) and a code motor (Step 10, tested with Qwen-Coder via vLLM). Requires Python 3.11+, an OpenAI-compatible API, and optionally a local code model.
 
-**BETO Skill** — A Claude Skill that runs the complete BETO Protocol interactively in Claude Code or Claude.ai with no infrastructure required. The lowest-friction entry point to BETO.
+**BETO Skill** — A Claude Skill that runs the complete BETO Protocol interactively in Claude Code or Claude.ai with no infrastructure required. Since v4.4, simple tasks are absorbed directly by the executor's internal light mode — no separate external surface is needed. The lowest-friction entry point to BETO.
 
 ---
 
@@ -60,6 +60,33 @@ IDEA_RAW
 The Skill is not a prerequisite for the Executor. But users who run the Skill first arrive at the Executor with a clearer idea, fewer surprises at the gates, and a schema already thought through.
 
 Both execute the same protocol. The difference is the execution environment.
+
+---
+
+## v4.4 — Execution Efficiency and Routing Layer
+
+BETO v4.4 optimizes *how* BETO executes internally without changing *what* BETO means. The 11-step protocol, the no-invention rules, and full traceability are unchanged.
+
+**What v4.4 adds:**
+
+- **Internal routing** — before each sub-problem, a deterministic `complexity_score` function selects the appropriate execution mode:
+  - `BETO_LIGHT_PATH` (score 0–5) — simple tasks, pointwise output, no graph needed
+  - `BETO_PARTIAL_PATH` (score 6–12) — localized work within an existing cycle
+  - `BETO_FULL_PATH` (score 13+) — complete systems, architecture, full materialization
+
+- **Stratified context** — every model call receives only the minimum required context: a stable core layer (rules, invariant templates), a cycle layer (active BETO_CORE, current step), and a local layer (current sub-problem). No global context dump per call.
+
+- **Persistent snapshots** — cycle state is captured between calls so the executor does not reconstruct the full context on every tramo. Snapshots are invalidated automatically when their source artifacts change.
+
+- **Simple task absorption** — `BETO_LIGHT_PATH` handles tasks that previously required a separate external skill surface, keeping them inside the unified executor under the same epistemic rules.
+
+- **PROJECT_INDEX** — a persistent JSON index (`.beto/project_index.json`) that locates artifacts without repeated global exploration.
+
+- **MODEL_CALL_PLAN** — every model call is governed, logged, and auditable via `EXECUTION_PERFORMANCE_LOG`.
+
+All routing decisions and route promotions (LIGHT→PARTIAL→FULL) are traceable — no silent routing. Full specification in `framework/EXECUTION_ROUTER.md` and `BETO_INSTRUCTIVO.md`.
+
+---
 
 ## Quickstart
 
@@ -111,6 +138,7 @@ beto-framework/
 ├── README.md
 ├── DOCUMENTACION_OFICIAL_BETO.md    ← Complete reference documentation
 ├── BETO_INSTRUCTIVO.md              ← Operational protocol (LLM executor instructions)
+├── CHANGELOG.md
 ├── docs/                            ← Structured documentation for new users
 │   ├── quickstart.md
 │   ├── architecture.md
@@ -118,10 +146,13 @@ beto-framework/
 │   ├── verification.md
 │   ├── faq.md
 │   └── related-work.md
-├── framework/                       ← 12 formal BETO templates
+├── framework/                       ← 23 formal BETO templates
+│   ├── (12 core templates — v4.2/v4.3)
+│   └── (11 routing & efficiency templates — v4.4)
 ├── beto_executor/                   ← Automated pipeline (Python)
 │   └── src/
 │       ├── main.py
+│       ├── execution_router/        ← v4.4: internal routing layer
 │       ├── orquestador/
 │       ├── motor_razonamiento/
 │       ├── motor_codigo/
@@ -131,7 +162,7 @@ beto-framework/
 ├── skills/
 │   └── beto-framework/              ← Claude Skill (install in Claude Code)
 │       ├── SKILL.md
-│       └── references/
+│       └── references/              ← All BETO templates, including v4.4
 ├── examples/
 │   ├── gastos_personales/           ← Complete cycle: personal expense tracker
 │   └── beto_executor_self_specification/  ← Complete cycle: BETO specifying itself
@@ -163,7 +194,15 @@ Full text: [research/BETO_Framework_Technical_Article.md](research/BETO_Framewor
 
 ## Status
 
-**Current:** BETO v4.2 — stable, field-tested, public repository (March 2026)
+**Current:** BETO v4.4.0 — Execution Efficiency and Routing Layer (March 2026)
+
+**Version history:**
+
+| Version | Date | Change |
+|---------|------|--------|
+| v4.4.0 | 2026-03-18 | Execution Efficiency and Routing Layer — internal routing, stratified context, snapshots, PROJECT_INDEX, MODEL_CALL_PLAN, simple task absorption |
+| v4.3.0 | 2026-03-17 | Operational Semantic Closure (OSC) Layer — DECLARED_EXECUTABLE states, EXECUTION_READINESS_CHECK, Gate G-2B |
+| v4.2.0 | 2026-03-12 | Public release — 11-step protocol, BETO_EXECUTOR, BETO Skill |
 
 **Empirical record:**
 

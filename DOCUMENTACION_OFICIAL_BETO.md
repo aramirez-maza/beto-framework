@@ -1511,3 +1511,77 @@ BETO v4.3 es **completamente aditivo**:
 ---
 
 *Framework BETO v4.3 — Alberto Ramírez — 2026*
+
+---
+
+## 15. BETO v4.4 — Execution Efficiency and Routing Layer
+
+### 15.1 Introducción
+
+BETO v4.4 introduce una capa de routing interno y eficiencia de ejecución que optimiza cómo ejecuta BETO sin alterar qué significa BETO. El núcleo semántico, las reglas de no invención, la trazabilidad y la compatibilidad con BETO v4.3 y OSC se preservan completamente.
+
+El problema que resuelve: BETO, por su riqueza estructural y el crecimiento de artefactos, tiende a operar con demasiado contexto por llamada al modelo. V4.4 introduce contexto mínimo autorizado por subproblema mediante un sistema de routing determinista.
+
+Adicionalmente, v4.4 absorbe las tareas simples dentro del executor unificado, eliminando la necesidad de mantener una pieza externa separada.
+
+### 15.2 Sistema de routing interno
+
+El **EXECUTION_ROUTER** evalúa cada subproblema mediante una función de complejidad:
+
+```
+complexity_score =
+  w1*num_outputs + w2*num_entities + w3*num_dependencies +
+  w4*ambiguity_level + w5*need_for_graph + w6*oq_critical_count +
+  w7*cross_module_scope + w8*lifecycle_scope
+```
+
+Pesos por defecto (v4.4): w1=1, w2=1, w3=1, w4=2, w5=3, w6=2, w7=2, w8=2
+
+| Score | Ruta | Uso |
+|-------|------|-----|
+| 0–5 | BETO_LIGHT_PATH | Tareas simples, salida puntual |
+| 6–12 | BETO_PARTIAL_PATH | Tareas medianas o localizadas |
+| 13+ | BETO_FULL_PATH | Sistemas completos, arquitectura nueva |
+
+### 15.3 Contexto estratificado (3 capas)
+
+| Capa | Nombre | Contenido |
+|------|--------|-----------|
+| A | STABLE_CORE_CONTEXT | Instructivo, reglas nucleares, templates invariantes (prefix-cacheable) |
+| B | CYCLE_CONTEXT | BETO_CORE activo, paso actual, OQs activas, estado de routing |
+| C | LOCAL_EXECUTION_CONTEXT | Archivo, template, phase, OQ — específico del subproblema |
+
+Regla: toda llamada incluye solo A + B mínimo + C. No se envía contexto global completo si el subproblema puede resolverse localmente.
+
+### 15.4 Snapshots persistentes
+
+Almacenados en `.beto/snapshots/`. Se invalidan cuando cambian sus fuentes de autoridad.
+
+- CYCLE_CONTEXT_SNAPSHOT — estado del ciclo en un momento
+- ACTIVE_OQ_SET — OQs relevantes para el tramo actual
+- LOCAL_EXECUTION_CONTEXT — contexto puntual del subproblema
+- MATERIALIZATION_SCOPE — qué materializar en el tramo
+
+### 15.5 PROJECT_INDEX
+
+Archivo JSON persistente en `.beto/project_index.json`. Schema en `framework/PROJECT_INDEX_SCHEMA.json`. Permite localizar artefactos sin exploración global. Es fuente operativa de localización, NO autoridad semántica.
+
+### 15.6 MODEL_CALL_PLAN y EXECUTION_PERFORMANCE_LOG
+
+Todo llamada al modelo está gobernada por MODEL_CALL_PLAN (incluye contexto, snapshots, cache eligibility, fallback, trace). Logueada en EXECUTION_PERFORMANCE_LOG para auditoría de eficiencia.
+
+### 15.7 Subejecutores (10)
+
+eligibility_executor, interview_executor, closure_executor, osc_executor, materialization_executor, verification_executor, beto_light_executor, beto_partial_executor, beto_full_executor, route_promotion_evaluator. Todos bajo el orquestador unificado — no pueden llamarse entre sí sin pasar por él.
+
+### 15.8 Nuevos templates (11)
+
+EXECUTION_ROUTER.md, ROUTING_DECISION_RECORD.md, ROUTE_PROMOTION_RECORD.md, EXECUTION_MODE_POLICY.md, CYCLE_CONTEXT_SNAPSHOT.md, ACTIVE_OQ_SET.md, LOCAL_EXECUTION_CONTEXT.md, MATERIALIZATION_SCOPE.md, MODEL_CALL_PLAN.md, PROJECT_INDEX_SCHEMA.json, EXECUTION_PERFORMANCE_LOG.md
+
+### 15.9 Compatibilidad
+
+BETO v4.4 es completamente aditivo. El núcleo v4.2, la capa OSC v4.3 y todos los gates no cambian. Los ciclos v4.3 existentes son compatibles sin modificación. Todos los campos nuevos tienen safe defaults.
+
+---
+
+*Framework BETO v4.4 — Alberto Ramírez — 2026*

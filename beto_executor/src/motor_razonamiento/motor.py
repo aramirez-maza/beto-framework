@@ -44,6 +44,8 @@ class MotorRazonamiento:
         state_manager,
         gates_operador,
         templates_dir: Path | None = None,
+        execution_router=None,
+        route_type: str = "",
     ):
         # BETO-TRACE: BETO_MOTOR_RAZ.SEC3.INPUT.IDEA_RAW
         # BETO-TRACE: BETO_MOTOR_RAZ.SEC3.INPUT.CICLO_ID
@@ -53,9 +55,26 @@ class MotorRazonamiento:
         self.state_manager = state_manager
         self.gates = gates_operador
 
+        # BETO-TRACE: BETO_V44.SEC7.PHASE.PHASE_6_EXECUTOR_INTEGRATION
+        # execution_router and route_type are optional — backward compatible with v4.3.
+        # When provided, snapshots and PROJECT_INDEX are generated automatically.
+        self.execution_router = execution_router
+        self.route_type = route_type
+
         self.artifact_writer = ArtifactWriter(cycle_dir)
         self.step_executor = StepExecutor(client, model, self.artifact_writer, templates_dir)
         self.beto_state_writer = BETOStateWriter(cycle_dir, ciclo_id)
+
+        # v4.4 operational artifacts — only active when execution_router is provided
+        if self.execution_router is not None:
+            from execution_router.snapshot_writer import SnapshotWriter
+            from execution_router.project_index_writer import ProjectIndexWriter
+            beto_dir = cycle_dir / ".beto"
+            self._snapshot_writer = SnapshotWriter(beto_dir=beto_dir, ciclo_id=ciclo_id)
+            self._project_index_writer = ProjectIndexWriter(beto_dir=beto_dir, ciclo_id=ciclo_id)
+        else:
+            self._snapshot_writer = None
+            self._project_index_writer = None
 
     def ejecutar(self, paso_inicio: int = 0) -> Path:
         """
@@ -71,7 +90,8 @@ class MotorRazonamiento:
             print(f"[Motor Razonamiento] Ejecutando Paso {paso}...")
 
             # BETO-TRACE: BETO_MOTOR_RAZ.SEC4.UNIT.PASO_EJECUCION
-            artefactos = self.step_executor.ejecutar_paso(paso, self.idea_raw)
+            # BETO-TRACE: BETO_V44.SEC7.PHASE.PHASE_6_EXECUTOR_INTEGRATION
+            artefactos = self.step_executor.ejecutar_paso(paso, self.idea_raw, self.route_type)
 
             # Registrar artefactos en Gestor de Ciclo
             # BETO-TRACE: BETO_MOTOR_RAZ.SEC6.MODEL.ARTIFACT_REGISTRY
@@ -100,6 +120,11 @@ class MotorRazonamiento:
                 self.beto_state_writer.update(paso)
             except Exception as e:
                 print(f"[BETO_STATE] Warning: update falló en paso {paso} — {e} (no bloquea)")
+
+            # v4.4 — Snapshot generation (REGLA SNAPSHOT_INVALIDATION)
+            # BETO-TRACE: BETO_V44.SEC7.PHASE.PHASE_2_CONTEXT_SNAPSHOT
+            if self._snapshot_writer is not None:
+                self._emit_snapshots(paso, artefactos)
 
             # BETO-TRACE: BETO_MOTOR_RAZ.SEC8.DECISION.GATES_G1_G2_G3
             # BETO-TRACE: BETO_MOTOR_RAZ.SEC6.MODEL.GATE_PAUSER
@@ -135,9 +160,12 @@ class MotorRazonamiento:
         BETO-TRACE: BETO_MOTOR_RAZ.SEC7.PHASE.PHASE_3_HANDOFF
         BETO-TRACE: BETO_MOTOR_RAZ.SEC3.OUTPUT.HANDOFF_PATH
         BETO-TRACE: BETO_MOTOR_RAZ.SEC1.INTENT.HANDOFF_TO_CODE
+        BETO-TRACE: BETO_V44.SEC7.PHASE.PHASE_3_OPERATIONAL_ARTIFACTS
 
         Verifica que todos los artefactos de Pasos 0–9 están presentes
         y emite la señal de handoff (ruta del directorio del ciclo).
+
+        v4.4: Generates PROJECT_INDEX after successful verification.
         """
         todos_presentes = True
         faltantes_total = []
@@ -153,5 +181,96 @@ class MotorRazonamiento:
                 f"Handoff fallido. Artefactos faltantes: {faltantes_total}"
             )
 
+        # v4.4 — Generate PROJECT_INDEX at handoff point
+        # BETO-TRACE: BETO_V44.SEC7.PHASE.PHASE_3_OPERATIONAL_ARTIFACTS
+        if self._project_index_writer is not None:
+            try:
+                index_path = self._project_index_writer.write(
+                    self.cycle_dir,
+                    updated_by="materialization_executor",
+                )
+                self.state_manager.aplicar_evento(
+                    self.ciclo_id,
+                    "PROJECT_INDEX_UPDATED",
+                    {
+                        "project_index_path": str(index_path),
+                        "updated_by": "materialization_executor",
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    },
+                )
+                print(f"[Motor Razonamiento] PROJECT_INDEX generado: {index_path}")
+            except Exception as e:
+                print(f"[PROJECT_INDEX] Warning: generación falló — {e} (no bloquea handoff)")
+
         print(f"[Motor Razonamiento] Handoff emitido: {self.cycle_dir}")
         return self.cycle_dir
+
+    def _emit_snapshots(self, paso: int, artefactos: list[str]) -> None:
+        """
+        BETO-TRACE: BETO_V44.SEC7.PHASE.PHASE_2_CONTEXT_SNAPSHOT
+        BETO-TRACE: BETO_V44.SEC7.PHASE.PHASE_6_EXECUTOR_INTEGRATION
+
+        Emit context snapshots for the completed paso.
+        Snapshot strategy per route_type and paso:
+          LC — all pasos, all routes
+          CS — after paso 4 (Gate G-2), PARTIAL/FULL only
+          AQ — after paso 6 (cierre asistido), PARTIAL/FULL only
+          MS — after paso 9 (pre-handoff), PARTIAL/FULL only
+        """
+        now = datetime.now(timezone.utc).isoformat()
+        is_partial_or_full = self.route_type in ("BETO_PARTIAL_PATH", "BETO_FULL_PATH")
+
+        # LC snapshot — always, all routes
+        lc_id = self._snapshot_writer.write_lc_snapshot(paso, artefactos, self.route_type)
+        self.state_manager.aplicar_evento(
+            self.ciclo_id,
+            "SNAPSHOT_CREATED",
+            {
+                "snapshot_id": lc_id,
+                "snapshot_type": "LOCAL_EXECUTION_CONTEXT",
+                "route_type": self.route_type,
+                "timestamp": now,
+            },
+        )
+
+        # CS snapshot — after paso 4, PARTIAL/FULL only
+        if paso == 4 and is_partial_or_full:
+            cs_id = self._snapshot_writer.write_cs_snapshot(paso, self.cycle_dir, self.route_type)
+            self.state_manager.aplicar_evento(
+                self.ciclo_id,
+                "SNAPSHOT_CREATED",
+                {
+                    "snapshot_id": cs_id,
+                    "snapshot_type": "CYCLE_CONTEXT_SNAPSHOT",
+                    "route_type": self.route_type,
+                    "timestamp": now,
+                },
+            )
+
+        # AQ snapshot — after paso 6, PARTIAL/FULL only
+        if paso == 6 and is_partial_or_full:
+            aq_id = self._snapshot_writer.write_aq_snapshot(paso, self.cycle_dir, self.route_type)
+            self.state_manager.aplicar_evento(
+                self.ciclo_id,
+                "SNAPSHOT_CREATED",
+                {
+                    "snapshot_id": aq_id,
+                    "snapshot_type": "ACTIVE_OQ_SET",
+                    "route_type": self.route_type,
+                    "timestamp": now,
+                },
+            )
+
+        # MS snapshot — after paso 9, PARTIAL/FULL only
+        if paso == 9 and is_partial_or_full:
+            ms_id = self._snapshot_writer.write_ms_snapshot(paso, self.cycle_dir, self.route_type)
+            self.state_manager.aplicar_evento(
+                self.ciclo_id,
+                "SNAPSHOT_CREATED",
+                {
+                    "snapshot_id": ms_id,
+                    "snapshot_type": "MATERIALIZATION_SCOPE",
+                    "route_type": self.route_type,
+                    "timestamp": now,
+                },
+            )

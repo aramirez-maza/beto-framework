@@ -1401,3 +1401,267 @@ La implementación OSC es válida si:
   - Existe Gate G-2B con sus 3 posibles resultados
   - Se preserva compatibilidad con BETO_PARALELO (cierre local por unidad)
   - No hay ciclos infinitos (max_operational_requestions = 2 es el límite duro)
+
+─────────────────────────────────────────────────────────────────────────────
+REGLAS BETO v4.4 — EXECUTION EFFICIENCY AND ROUTING LAYER
+─────────────────────────────────────────────────────────────────────────────
+
+REGLA EXECUTION_PATH_SELECTION
+
+Antes de ejecutar cualquier subproblema, el executor DEBE evaluar complexity_score
+usando la función declarada en EXECUTION_ROUTER.md y seleccionar una de tres rutas:
+
+  BETO_LIGHT_PATH  → score 0–5
+  BETO_PARTIAL_PATH → score 6–12
+  BETO_FULL_PATH   → score 13+
+
+La función de complejidad y los pesos por defecto son:
+
+  complexity_score =
+    1*num_outputs + 1*num_entities + 1*num_dependencies +
+    2*ambiguity_level + 3*need_for_graph + 2*oq_critical_count +
+    2*cross_module_scope + 2*lifecycle_scope
+
+Los umbrales son configurables pero sus defaults son fijos, documentados y trazables.
+Toda selección de ruta debe registrarse en ROUTING_DECISION_RECORD.
+No existe selección de ruta silenciosa.
+
+─────────────────────────────────────────────────────────────────────────────
+
+REGLA MINIMAL_CONTEXT_EXECUTION
+
+Toda llamada al modelo debe incluir exclusivamente:
+
+  STABLE_CORE_CONTEXT (Capa A — siempre obligatoria)
+  +
+  CYCLE_CONTEXT mínimo requerido (Capa B — solo si route_type ≠ LIGHT)
+  +
+  LOCAL_EXECUTION_CONTEXT específico del subproblema (Capa C — siempre obligatoria)
+
+No se permite enviar contexto global completo si el subproblema puede resolverse
+localmente sin pérdida de autoridad semántica.
+Toda llamada debe estar gobernada por un MODEL_CALL_PLAN.
+
+─────────────────────────────────────────────────────────────────────────────
+
+REGLA CONTEXT_STRATIFICATION
+
+El contexto de ejecución está estratificado en tres capas:
+
+  CAPA A — STABLE_CORE_CONTEXT
+    Versión del instructivo, reglas nucleares BETO, reglas OSC, templates invariantes,
+    esquema estructural de salida, reglas del routing, contratos base del executor.
+    Esta capa es estable, reusable y prefix-cacheable.
+
+  CAPA B — CYCLE_CONTEXT
+    IDEA_RAW o artefacto raíz, BETO_CORE vigente, paso actual, OQs activas,
+    estado del ciclo, unidad actual (si aplica), path de ejecución, última decisión de routing.
+    Esta capa cambia con cada paso del ciclo.
+
+  CAPA C — LOCAL_EXECUTION_CONTEXT
+    Archivo actual, diff actual, template activo, phase activa, contract activo,
+    OQ activa, trace registry local, scope de materialización local,
+    snapshot aplicable al tramo actual.
+    Esta capa es específica del subproblema puntual.
+
+─────────────────────────────────────────────────────────────────────────────
+
+REGLA SNAPSHOT_INVALIDATION
+
+Un snapshot (CYCLE_CONTEXT_SNAPSHOT, ACTIVE_OQ_SET, LOCAL_EXECUTION_CONTEXT,
+MATERIALIZATION_SCOPE) debe invalidarse si cambia cualquiera de estos elementos:
+
+  - El BETO_CORE autorizado del ciclo activo
+  - Una OQ activa contenida en el snapshot
+  - La phase o contract asociado
+  - Una unidad estructural relevante
+  - Un artefacto fuente declarado como autoridad en source_artifacts
+  - El route_type del tramo actual (por promoción)
+  - El promotion_state de la ruta
+
+Un snapshot invalidado no puede usarse para resolver subproblemas.
+Debe regenerarse antes de continuar.
+
+─────────────────────────────────────────────────────────────────────────────
+
+REGLA MODEL_CALL_GOVERNANCE
+
+Toda llamada al modelo debe:
+  1. Tener un MODEL_CALL_PLAN generado antes de la llamada
+  2. Declarar explícitamente qué contexto global se excluye y por qué
+  3. Declarar los criterios de aceptación del output
+  4. Declarar la escalation_policy y fallback_strategy
+  5. Quedar logueada en EXECUTION_PERFORMANCE_LOG tras completarse
+  6. Verificar que todos los snapshots usados están en estado VALID
+
+El MODEL_CALL_PLAN debe ejecutarse, no solo documentarse.
+
+─────────────────────────────────────────────────────────────────────────────
+
+REGLA LOCAL_OSC_EVALUATION
+
+La capa OSC (BETO v4.3) opera localmente en BETO v4.4:
+
+  - EXECUTION_READINESS_CHECK se aplica por OQ crítica o por unidad local
+  - Gate G-2B se registra por unidad o subcontexto
+  - BETO_GAP_EXECUTIONAL se detecta localmente
+  - La agregación global es solo informativa
+
+En BETO_PARALELO, una unidad bloqueada no fuerza reevaluación global de las demás.
+
+Si una tarea en BETO_LIGHT_PATH activa una OQ crítica o criterio OSC relevante:
+  - Si el subproblema sigue siendo local → ejecutar evaluación local OSC
+  - Si no puede cerrarse bajo contexto mínimo → PROMOVER RUTA (ver REGLA ROUTE_PROMOTION)
+
+─────────────────────────────────────────────────────────────────────────────
+
+REGLA INCREMENTAL_MATERIALIZATION
+
+La materialización puede trabajar con contexto local (MATERIALIZATION_SCOPE)
+sin necesidad de recomponer el sistema entero entre tramos.
+
+La materialización no debe volver a cargar contexto de razonamiento global
+salvo que exista un bloqueo formal declarado (BETO_GAP que requiere razonamiento).
+
+La separación entre razonamiento y materialización es:
+
+  RAZONAMIENTO:
+    análisis semántico, entrevista, clasificación, cierre, graph,
+    manifiestos, validaciones estructurales, selección de ruta, promociones
+
+  MATERIALIZACIÓN:
+    generación de archivos, edición de artefactos locales, validación de
+    trazabilidad, verificación post-materialización, operaciones del modo liviano
+
+─────────────────────────────────────────────────────────────────────────────
+
+REGLA PROJECT_INDEX_PERSISTENCE
+
+El PROJECT_INDEX debe:
+  - Existir como archivo JSON persistente en .beto/project_index.json
+  - Seguir el schema declarado en PROJECT_INDEX_SCHEMA.json
+  - Actualizarse automáticamente por el executor en eventos de materialización
+  - Permitir re-indexación manual forzada mediante evento REINDEX_PROJECT_INDEX
+  - Registrar al menos: archivo, tipo, rol, phase, unidad, dependencias, trace_ids,
+    manifest, contract, estado de materialización, fecha de actualización,
+    route_relevance, execution_locality, snapshot_dependencies
+
+El PROJECT_INDEX es fuente operativa de localización, NO autoridad semántica.
+La autoridad semántica sigue en BETO_CORE, graph, manifests y contracts.
+
+─────────────────────────────────────────────────────────────────────────────
+
+REGLA NO_SEPARATE_SKILL_SURFACE
+
+No puede existir una pieza de ejecución separada fuera del executor principal
+que implemente lógica BETO duplicada o paralela.
+
+Toda lógica de ejecución, incluyendo la de tareas simples, debe vivir dentro
+del executor BETO unificado.
+
+BETO_LIGHT_PATH es una optimización interna del executor — no un subsistema autónomo.
+La diferencia entre modos es de alcance y carga contextual, no de autoridad epistemológica.
+
+Este invariante no puede ser violado por optimizaciones de rendimiento.
+
+─────────────────────────────────────────────────────────────────────────────
+
+REGLA ROUTE_PROMOTION
+
+Si durante una ejecución en BETO_LIGHT_PATH o BETO_PARTIAL_PATH se detecta que:
+  - Apareció una OQ crítica no absorbible localmente
+  - Se requiere BETO_SYSTEM_GRAPH no cargado
+  - Se requiere manifest nuevo
+  - El scope se volvió multiunidad
+  - La ambigüedad superó el umbral permitido para el modo actual
+  - La tarea ya no puede resolverse sin reconstrucción de autoridad estructural
+
+Entonces el route_promotion_evaluator debe registrar la promoción:
+  LIGHT → PARTIAL (si el subproblema puede cerrarse con CYCLE_CONTEXT)
+  PARTIAL → FULL  (si el subproblema requiere graph o reconstrucción global)
+  LIGHT → FULL    (si aplica directamente)
+
+La promoción debe quedar registrada en ROUTE_PROMOTION_RECORD.
+La promoción no puede ser silenciosa.
+La promoción debe describir qué disparó el cambio de ruta.
+
+─────────────────────────────────────────────────────────────────────────────
+
+REGLA LIGHT_MODE_SCOPE_CONTROL
+
+BETO_LIGHT_PATH no puede:
+  - Cargar BETO_SYSTEM_GRAPH completo
+  - Cargar MANIFEST_PROYECTO completo
+  - Cargar más de 2 artefactos estructurales globales sin justificación
+  - Inventar alcance más allá del subproblema declarado
+  - Ignorar trazabilidad cuando aplique
+  - Generar artefactos incompatibles con el núcleo
+
+BETO_LIGHT_PATH puede:
+  - Resolver tareas simples de una sola pieza con salida puntual
+  - Absorber tareas antes delegadas a un skill externo
+  - Cargar CYCLE_CONTEXT mínimo si el subproblema lo requiere
+  - Ejecutar evaluación local OSC si la OQ sigue siendo local
+
+─────────────────────────────────────────────────────────────────────────────
+
+REGLA EXECUTOR_UNIFICATION
+
+Todos los modos de ejecución y todos los subejecutores deben vivir bajo
+el mismo executor BETO, compartiendo:
+  - Reglas nucleares de no invención
+  - Trazabilidad completa
+  - Logging de auditoría (EXECUTION_PERFORMANCE_LOG)
+  - Versión del framework
+  - Política de no invención
+  - Compatibilidad con OSC (BETO v4.3)
+
+Los subejecutores no pueden llamarse entre sí sin pasar por el orquestador central.
+
+Subejecutores declarados en BETO v4.4:
+  eligibility_executor, interview_executor, closure_executor, osc_executor,
+  materialization_executor, verification_executor, beto_light_executor,
+  beto_partial_executor, beto_full_executor, route_promotion_evaluator
+
+─────────────────────────────────────────────────────────────────────────────
+
+Nuevos eventos del ciclo de estado v4.4 (se registran en state_manager):
+
+  ROUTING_DECISION_REGISTERED    — decisión de routing seleccionada y registrada
+  ROUTE_PROMOTED                 — promoción de ruta registrada
+  SNAPSHOT_CREATED               — snapshot creado (con tipo: CS, AQ, LC, MS)
+  SNAPSHOT_INVALIDATED           — snapshot invalidado con razón
+  PROJECT_INDEX_UPDATED          — PROJECT_INDEX actualizado por materialización
+  REINDEX_PROJECT_INDEX          — re-indexación manual disparada por operador
+  MODEL_CALL_PLANNED             — MODEL_CALL_PLAN creado antes de llamada
+  MODEL_CALL_COMPLETED           — llamada al modelo completada (con call_id)
+  PERFORMANCE_LOG_ENTRY          — entrada registrada en EXECUTION_PERFORMANCE_LOG
+
+TABLA DE TIPOS AUTORIZADOS POR SECCIÓN (extensión v4.4):
+
+Sección | TIPO                    | Qué representa
+--------|-------------------------|-----------------------------------------------
+SEC7    | ROUTING_TEMPLATE        | Template de la capa de routing v4.4
+SEC7    | SNAPSHOT_TEMPLATE       | Template del sistema de snapshots v4.4
+SEC7    | OPERATIONAL_TEMPLATE    | Template de artefactos operativos v4.4
+SEC8    | ROUTING_CONFIG          | Configuración de routing (umbrales, pesos)
+SEC8    | EXECUTOR_MODULE         | Módulo del executor Python
+SEC9    | ROUTING_DECISION        | Decisión de routing registrada
+SEC9    | ROUTE_PROMOTION         | Promoción de ruta registrada
+
+CRITERIO DE ACEPTACIÓN V4.4
+
+La implementación v4.4 es válida si:
+  - El routing decide correctamente entre los tres paths según complexity_score
+  - Las tareas simples se resuelven dentro del executor sin skill separado
+  - El contexto por llamada se reduce sin pérdida de autoridad semántica
+  - El executor opera por tramos y no recompone el sistema entero innecesariamente
+  - OSC puede evaluarse localmente sin bloqueo global
+  - PROJECT_INDEX permite localizar unidades y artefactos sin exploración global
+  - MODEL_CALL_PLAN deja trazabilidad operativa de cada llamada
+  - La materialización puede trabajar con contexto local
+  - Las promociones de ruta quedan registradas y justificadas
+  - No se rompe compatibilidad con BETO v4.3
+  - No se relajan reglas de no invención
+  - Se mantiene trazabilidad completa
+  - No aparece una nueva superficie de mantenimiento separada del executor principal

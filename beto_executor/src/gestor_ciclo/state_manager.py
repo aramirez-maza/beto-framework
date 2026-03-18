@@ -22,6 +22,17 @@ VALID_EVENT_TYPES = {
     "BETO_DECLARATION_PROMOTED_TO_EXECUTABLE",  # OQ promovida a DECLARED_EXECUTABLE
     "BETO_DECLARATION_ACCEPTED_WITH_LIMITS",    # OQ aceptada como DECLARED_WITH_LIMITS
     "REGISTRAR_G2B_RESULT",                 # Resultado del gate G-2B (Operational Readiness Gate)
+    # Routing & Efficiency events — BETO v4.4 (Execution Efficiency and Routing Layer)
+    # Ref: BETO_INSTRUCTIVO.md — REGLAS V4.4 — Nuevos eventos del ciclo de estado
+    "ROUTING_DECISION_REGISTERED",          # Decisión de routing seleccionada y registrada
+    "ROUTE_PROMOTED",                       # Promoción de ruta registrada (LIGHT→PARTIAL→FULL)
+    "SNAPSHOT_CREATED",                     # Snapshot de contexto creado (CS, AQ, LC, MS)
+    "SNAPSHOT_INVALIDATED",                 # Snapshot invalidado con razón
+    "PROJECT_INDEX_UPDATED",                # PROJECT_INDEX actualizado por evento de materialización
+    "REINDEX_PROJECT_INDEX",                # Re-indexación manual disparada por el operador
+    "MODEL_CALL_PLANNED",                   # MODEL_CALL_PLAN creado antes de una llamada al modelo
+    "MODEL_CALL_COMPLETED",                 # Llamada al modelo completada (con call_id)
+    "PERFORMANCE_LOG_ENTRY",                # Entrada registrada en EXECUTION_PERFORMANCE_LOG
 }
 
 
@@ -170,6 +181,134 @@ class StateManager:
                 "timestamp": payload.get("timestamp", ""),
                 "unit_id": payload.get("unit_id", ""),
             })
+
+        # — Routing & Efficiency Events — BETO v4.4 —
+        # Ref: BETO_INSTRUCTIVO.md — REGLAS V4.4 — Nuevos eventos del ciclo de estado
+
+        elif tipo_evento == "ROUTING_DECISION_REGISTERED":
+            # Registra una decisión de routing seleccionada
+            # payload: { decision_id, route_selected, raw_score, step_context, unit_id?,
+            #            complexity_breakdown, executor_assigned, trace_anchor }
+            state["current_route_type"] = payload.get("route_selected", "")
+            state["last_routing_decision_id"] = payload.get("decision_id", "")
+            if "routing_decisions" not in state:
+                state["routing_decisions"] = []
+            state["routing_decisions"].append({
+                "decision_id": payload.get("decision_id", ""),
+                "route_selected": payload.get("route_selected", ""),
+                "raw_score": payload.get("raw_score", 0),
+                "step_context": payload.get("step_context", ""),
+                "unit_id": payload.get("unit_id", ""),
+                "timestamp": payload.get("timestamp", ""),
+            })
+
+        elif tipo_evento == "ROUTE_PROMOTED":
+            # Registra una promoción de ruta
+            # payload: { promotion_id, original_decision_id, promotion_transition,
+            #            new_route, trigger_description, unit_id?, trace_anchor }
+            state["current_route_type"] = payload.get("new_route", "")
+            state["last_promotion_id"] = payload.get("promotion_id", "")
+            state["route_promotion_count"] = state.get("route_promotion_count", 0) + 1
+            if "route_promotions" not in state:
+                state["route_promotions"] = []
+            state["route_promotions"].append({
+                "promotion_id": payload.get("promotion_id", ""),
+                "transition": payload.get("promotion_transition", ""),
+                "new_route": payload.get("new_route", ""),
+                "original_decision_id": payload.get("original_decision_id", ""),
+                "trigger_description": payload.get("trigger_description", ""),
+                "unit_id": payload.get("unit_id", ""),
+                "timestamp": payload.get("timestamp", ""),
+            })
+
+        elif tipo_evento == "SNAPSHOT_CREATED":
+            # Registra la creación de un snapshot de contexto
+            # payload: { snapshot_id, snapshot_type, route_type, unit_id?, cycle_id }
+            if "active_snapshots" not in state:
+                state["active_snapshots"] = []
+            state["active_snapshots"].append({
+                "snapshot_id": payload.get("snapshot_id", ""),
+                "snapshot_type": payload.get("snapshot_type", ""),
+                "route_type": payload.get("route_type", ""),
+                "unit_id": payload.get("unit_id", ""),
+                "validity_state": "VALID",
+                "timestamp": payload.get("timestamp", ""),
+            })
+
+        elif tipo_evento == "SNAPSHOT_INVALIDATED":
+            # Registra la invalidación de un snapshot
+            # payload: { snapshot_id, reason }
+            snapshot_id = payload.get("snapshot_id")
+            if "active_snapshots" in state:
+                for s in state["active_snapshots"]:
+                    if s.get("snapshot_id") == snapshot_id:
+                        s["validity_state"] = "INVALIDATED"
+                        s["invalidation_reason"] = payload.get("reason", "")
+            if "invalidated_snapshots" not in state:
+                state["invalidated_snapshots"] = []
+            state["invalidated_snapshots"].append({
+                "snapshot_id": snapshot_id,
+                "reason": payload.get("reason", ""),
+                "timestamp": payload.get("timestamp", ""),
+            })
+
+        elif tipo_evento == "PROJECT_INDEX_UPDATED":
+            # Registra la actualización del PROJECT_INDEX
+            # payload: { project_index_path, updated_by, entry_count? }
+            state["project_index_path"] = payload.get("project_index_path", "")
+            state["project_index_last_updated"] = payload.get("timestamp", "")
+
+        elif tipo_evento == "REINDEX_PROJECT_INDEX":
+            # Registra una re-indexación manual del PROJECT_INDEX
+            # payload: { project_index_path, triggered_by, reason }
+            state["project_index_path"] = payload.get("project_index_path", "")
+            state["project_index_last_updated"] = payload.get("timestamp", "")
+            # Log as gate decision for audit trail
+            state["decisiones_gate"].append({
+                "gate_id": "REINDEX",
+                "decision": "MANUAL_REINDEX",
+                "justificacion_opcional": payload.get("reason", ""),
+                "paso_retroceso_si_aplica": None,
+                "timestamp": payload.get("timestamp", ""),
+                "unit_id": payload.get("unit_id", ""),
+            })
+
+        elif tipo_evento == "MODEL_CALL_PLANNED":
+            # Registra la creación de un MODEL_CALL_PLAN
+            # payload: { call_id, route_type, executor_type, purpose, trace_anchor, unit_id? }
+            if "model_call_log" not in state:
+                state["model_call_log"] = []
+            state["model_call_log"].append({
+                "call_id": payload.get("call_id", ""),
+                "route_type": payload.get("route_type", ""),
+                "executor_type": payload.get("executor_type", ""),
+                "purpose": payload.get("purpose", ""),
+                "call_status": "PLANNED",
+                "trace_anchor": payload.get("trace_anchor", ""),
+                "unit_id": payload.get("unit_id", ""),
+                "timestamp": payload.get("timestamp", ""),
+            })
+
+        elif tipo_evento == "MODEL_CALL_COMPLETED":
+            # Actualiza el estado de una llamada completada
+            # payload: { call_id, call_status, output_artifact?, gaps_detected? }
+            call_id = payload.get("call_id")
+            if "model_call_log" in state:
+                for entry in state["model_call_log"]:
+                    if entry.get("call_id") == call_id:
+                        entry["call_status"] = payload.get("call_status", "COMPLETED")
+                        if payload.get("output_artifact"):
+                            entry["output_artifact"] = payload["output_artifact"]
+            state["model_call_count"] = state.get("model_call_count", 0) + 1
+
+        elif tipo_evento == "PERFORMANCE_LOG_ENTRY":
+            # Registra una entrada en el EXECUTION_PERFORMANCE_LOG
+            # payload: { entry_id, call_id, route_type, executor_type, latency_ms?,
+            #            tokens_input?, tokens_output?, model_class, cache_hit, call_status,
+            #            promotion_occurred?, promotion_id?, gaps_detected, unit_id? }
+            if "performance_log" not in state:
+                state["performance_log"] = []
+            state["performance_log"].append(dict(payload))
 
         # BETO-TRACE: BETO_GESTOR.SEC8.DECISION.WRITE_BEFORE_CONFIRM
         self._persist(ciclo_id, state)
