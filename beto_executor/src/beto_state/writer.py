@@ -14,6 +14,9 @@ Nunca borra información previamente extraída — solo agrega o actualiza.
 """
 
 from __future__ import annotations
+import os
+import sys
+import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -28,6 +31,14 @@ from .extractor import (
 
 BETO_STATE_FILENAME = "BETO_STATE.json"
 
+# ── Phase 2 strict mode ─────────────────────────────────────────────────────
+# strict=False (default): if beto.db is present and Phase 2 render fails,
+#   fall back to the legacy format and emit a strong warning.
+# strict=True: if beto.db is present and Phase 2 render fails, raise
+#   immediately so the failure is never silently hidden.
+# Toggle via env var at process start: BETO_STRICT_PHASE2=1
+STRICT_PHASE2_DB_RENDER: bool = os.environ.get("BETO_STRICT_PHASE2", "0") == "1"
+
 
 class BETOStateWriter:
     """
@@ -36,8 +47,13 @@ class BETOStateWriter:
 
     Phase 2 (v4.5): when a .beto/beto.db exists under cycle_dir, the writer
     also pushes extracted state to SQLite and renders BETO_STATE.json from
-    SQLite as the canonical source.  Falls back to the legacy markdown-based
-    format if any DB operation fails — the pipeline is never blocked.
+    SQLite as the canonical source.
+
+    Fallback policy (see STRICT_PHASE2_DB_RENDER):
+      - No DB found:        → legacy format, metadata.fallback_reason=DB_NOT_FOUND
+      - DB present, OK:     → Phase 2 format, metadata.rendered_from=sqlite
+      - DB present, fails, strict=False → legacy + strong warning, fallback_reason=PHASE2_RENDER_FAILED
+      - DB present, fails, strict=True  → RuntimeError raised, no fallback
     """
 
     def __init__(self, cycle_dir: Path, ciclo_id: str):
@@ -85,10 +101,9 @@ class BETOStateWriter:
 
         self._save(state)
 
-        # Phase 2: push extracted fields to SQLite, then re-render from DB
-        if (self._beto_dir / "beto.db").exists():
-            self._push_to_db(state, paso)
-            self._render_phase2()
+        # Phase 2: push to DB + re-render, or annotate legacy with fallback reason.
+        # Policy is enforced inside _attempt_phase2_render.
+        self._attempt_phase2_render(state, paso)
 
         return state
 
@@ -137,12 +152,11 @@ class BETOStateWriter:
 
     def _push_to_db(self, state: BETOState, paso: int) -> None:
         """
-        Push system-info and OQ state to SQLite so state_reader can render
-        a canonical payload from the DB.  Non-fatal — any failure is logged
-        to stderr and the pipeline continues with the legacy JSON format.
+        Push system-info and OQ state to SQLite so state_reader can render a
+        canonical payload.  Non-fatal — a push failure means the render may
+        use stale data, but the render step itself decides the final policy.
         """
         import json as _json
-        import sys
         try:
             from persistence.writers.cycle_writer import CycleWriter
             from persistence.writers.oq_writer import OQWriter
@@ -170,44 +184,121 @@ class BETOStateWriter:
                 paso=paso,
             )
         except Exception as exc:
-            print(f"[BETO_STATE] Warning: DB push failed — {exc}", file=sys.stderr)
+            print(
+                f"[BETO_STATE] WARNING reason_code=DB_PUSH_FAILED "
+                f"cycle={self.ciclo_id} exc={type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
 
-    def _render_phase2(self) -> None:
+    def _attempt_phase2_render(self, state: BETOState, paso: int) -> None:
         """
-        Render BETO_STATE.json from SQLite (Phase 2 canonical format).
+        Central Phase 2 render policy:
 
-        The output is a superset of the legacy format:
-          - All Phase 2 canonical keys (cycle_id, project_id, route_mode, …)
-          - Legacy keys preserved as aliases (ciclo_id, paso_actual,
-            oqs_abiertas, oqs_cerradas) so that context_builder.py and
-            _load_or_create() continue to work without modification.
+          1. No DB  → annotate legacy with fallback_reason=DB_NOT_FOUND (compat, not error)
+          2. DB OK  → push to DB, render Phase 2, annotate metadata.rendered_from=sqlite
+          3. DB fail, strict=False → push to DB, fallback legacy + strong warning
+          4. DB fail, strict=True  → push to DB, raise RuntimeError (no fallback)
+        """
+        db_path = self._beto_dir / "beto.db"
 
-        Falls back silently to the already-written legacy JSON if the DB
-        render fails.
+        if not db_path.exists():
+            print(
+                f"[BETO_STATE] DB_NOT_FOUND — using legacy format "
+                f"(cycle={self.ciclo_id}, expected_db={db_path})",
+                file=sys.stderr,
+            )
+            self._annotate_metadata({
+                "rendered_from": "legacy",
+                "fallback_reason": "DB_NOT_FOUND",
+            })
+            return
+
+        # DB is present — push extracted state, then render
+        self._push_to_db(state, paso)
+        try:
+            self._do_phase2_render()
+        except Exception as exc:
+            self._handle_render_failure(exc, db_path)
+
+    def _do_phase2_render(self) -> None:
+        """
+        Render BETO_STATE.json from SQLite.  Raises on any failure — the
+        caller (_attempt_phase2_render) owns the fallback policy.
+
+        Output is a superset of the legacy format:
+          - Phase 2 canonical keys (cycle_id, project_id, route_mode, …)
+          - Legacy aliases (ciclo_id, paso_actual, oqs_abiertas, oqs_cerradas)
+            so that context_builder.py and _load_or_create() need no changes.
         """
         import json as _json
-        import sys
+        from persistence.readers.state_reader import build_state_payload
+
+        payload = build_state_payload(self._beto_dir, self.ciclo_id)
+
+        # Merge: legacy fields on disk first (preserves nodos, routing summary,
+        # etc. not yet tracked in SQLite); Phase 2 keys win on conflict.
         try:
-            from persistence.readers.state_reader import build_state_payload
+            legacy = _json.loads(self.state_path.read_text(encoding="utf-8"))
+        except Exception:
+            legacy = {}
 
-            # Build Phase 2 payload from DB
-            payload = build_state_payload(self._beto_dir, self.ciclo_id)
+        merged = {**legacy, **payload}
+        self.state_path.write_text(
+            _json.dumps(merged, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
 
-            # Merge: start from the legacy JSON already on disk so that fields
-            # not yet tracked in SQLite (nodos, routing_decisions summary, …)
-            # are preserved.  Phase 2 keys win on conflict.
-            try:
-                legacy = _json.loads(self.state_path.read_text(encoding="utf-8"))
-            except Exception:
-                legacy = {}
+    def _handle_render_failure(self, exc: Exception, db_path: Path) -> None:
+        """
+        Log a structured entry for a Phase 2 render failure, then enforce
+        STRICT_PHASE2_DB_RENDER policy:
+          strict=False → annotate legacy file with PHASE2_RENDER_FAILED, continue
+          strict=True  → raise RuntimeError, no fallback
+        """
+        tb_summary = "".join(
+            traceback.format_exception(type(exc), exc, exc.__traceback__, limit=5)
+        ).strip()
 
-            merged = {**legacy, **payload}
-            self.state_path.write_text(
-                _json.dumps(merged, indent=2, ensure_ascii=False),
-                encoding="utf-8",
-            )
-        except Exception as exc:
-            print(f"[BETO_STATE] Warning: Phase 2 render failed — {exc}", file=sys.stderr)
+        print(
+            f"[BETO_STATE] reason_code=PHASE2_RENDER_FAILED "
+            f"db_path={db_path} "
+            f"cycle_id={self.ciclo_id} "
+            f"strict={STRICT_PHASE2_DB_RENDER} "
+            f"exc_type={type(exc).__name__} "
+            f"exc_message={exc}\n"
+            f"{tb_summary}",
+            file=sys.stderr,
+        )
+
+        if STRICT_PHASE2_DB_RENDER:
+            raise RuntimeError(
+                f"Phase 2 render failed for cycle '{self.ciclo_id}' "
+                f"(reason_code=PHASE2_RENDER_FAILED, strict=True): {exc}"
+            ) from exc
+
+        # Non-strict: fall back to legacy with explicit annotation
+        self._annotate_metadata({
+            "rendered_from": "legacy",
+            "fallback_reason": "PHASE2_RENDER_FAILED",
+            "reason_detail": f"{type(exc).__name__}: {exc}",
+        })
+
+    def _annotate_metadata(self, metadata: dict) -> None:
+        """
+        Patch a top-level 'metadata' key into the current BETO_STATE.json.
+        Used to record rendered_from and fallback_reason on the legacy format.
+        No-op if the file cannot be read/written.
+        """
+        import json as _json
+        try:
+            doc = _json.loads(self.state_path.read_text(encoding="utf-8"))
+        except Exception:
+            doc = {}
+        doc["metadata"] = metadata
+        self.state_path.write_text(
+            _json.dumps(doc, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
 
     # ── File I/O ───────────────────────────────────────────────────────────
 
