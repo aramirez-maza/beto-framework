@@ -115,6 +115,57 @@ The classification is enforced through a formal semantic independence test: *Can
 
 ---
 
+## Execution Routing (v4.4)
+
+Since v4.4, the Executor automatically selects an execution path for each cycle based on a complexity estimate of the IDEA_RAW. The routing decision is made before any LLM call and is persisted as a `ROUTING_DECISION_RECORD`.
+
+### Execution Paths
+
+| Path | Score | Behavior |
+|---|---|---|
+| `BETO_LIGHT_PATH` | 0–5 | Simple, single-output tasks. Capa B (BETO_STATE) omitted from context. |
+| `BETO_PARTIAL_PATH` | 6–12 | Modification or extension tasks. Full context with minimal BETO_STATE. |
+| `BETO_FULL_PATH` | 13+ | Multi-component systems. Full stratified context — all three layers. |
+
+### Complexity Score
+
+The score is computed from eight factors:
+
+```
+score = w1*num_outputs + w2*num_entities + w3*num_dependencies
+      + w4*ambiguity_level + w5*need_for_graph + w6*oq_critical_count
+      + w7*cross_module_scope + w8*lifecycle_scope
+```
+
+Default weights: `w1=1, w2=1, w3=1, w4=2, w5=3, w6=2, w7=2, w8=2`
+
+The initial estimate is a heuristic derived from the IDEA_RAW text. Routing can be promoted (LIGHT→PARTIAL→FULL) during execution if factors change. Every promotion produces a `ROUTE_PROMOTION_RECORD`.
+
+### Stratified Context (3 Layers)
+
+Every model call receives only the minimum required context:
+
+- **Layer A** — STABLE_CORE_CONTEXT: instructions, rules, invariant templates (prefix-cacheable, always present)
+- **Layer B** — CYCLE_CONTEXT: BETO_STATE, current step, active Open Questions, routing state (omitted for LIGHT, present for PARTIAL and FULL)
+- **Layer C** — LOCAL_EXECUTION_CONTEXT: current file, diff, template, phase (always present)
+
+### Persistent Snapshots
+
+After key steps, the Executor writes context snapshots to `.beto/snapshots/`:
+
+| Snapshot | Trigger | Routes |
+|---|---|---|
+| `LOCAL_EXECUTION_CONTEXT` (LC) | Every paso | All routes |
+| `CYCLE_CONTEXT_SNAPSHOT` (CS) | After paso 4 (G-2) | PARTIAL / FULL only |
+| `ACTIVE_OQ_SET` (AQ) | After paso 6 | PARTIAL / FULL only |
+| `MATERIALIZATION_SCOPE` (MS) | After paso 9 (G-3) | PARTIAL / FULL only |
+
+### PROJECT_INDEX
+
+At handoff (after paso 9 verification), the Executor writes `.beto/project_index.json` — a persistent index of all cycle artifacts, routing decisions, promotions, and snapshots. Schema: `PROJECT_INDEX_SCHEMA.json` (v4.4.0).
+
+---
+
 ## BETO_STATE Engine (Executor)
 
 The Executor maintains a live epistemic context document — `BETO_STATE.json` — updated after each step. It is injected as the first message in each LLM call from Step 2 onward.
@@ -130,11 +181,17 @@ This produces a 60–70% reduction in context size compared to injecting full ar
 ```
 src/
 ├── main.py                          ← CLI entry point
-├── orquestador/root.py              ← Full cycle orchestration
+├── orquestador/root.py              ← Full cycle orchestration + routing init
+├── execution_router/
+│   ├── router.py                    ← ExecutionRouter — path selection + ROUTING_DECISION_RECORD
+│   ├── complexity_scorer.py         ← 8-factor complexity score computation
+│   ├── path_registry.py             ← BETO_LIGHT/PARTIAL/FULL_PATH constants
+│   ├── snapshot_writer.py           ← LC / CS / AQ / MS snapshot generation
+│   └── project_index_writer.py     ← .beto/project_index.json generation
 ├── motor_razonamiento/
-│   ├── motor.py                     ← Steps 0–9 loop
+│   ├── motor.py                     ← Steps 0–9 loop + snapshot emission
 │   ├── step_executor.py             ← LLM calls (split-call for Steps 2 and 4)
-│   └── context_builder.py          ← BETO_STATE + templates + artifacts per step
+│   └── context_builder.py          ← Stratified context (route_type-aware)
 ├── motor_codigo/                    ← Step 10: scaffold + code generation
 ├── gates_operador/
 │   ├── gates.py                     ← Full gate cycle

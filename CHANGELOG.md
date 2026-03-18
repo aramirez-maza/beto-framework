@@ -197,7 +197,7 @@ BETO v4.2 blocked what was NOT_STATED. BETO v4.3 also validates what IS declared
 
 ## [4.2.2] — 2026-03-14
 
-**Documentation: structural refactor**
+**Documentation: structural refactor + BETO Skill override evaluation**
 
 - `README.md` rewritten as landing page — problem, core idea, three-layer overview, guarantees, explicit limits, documentation map
 - `docs/` layer created with five new files: `quickstart.md`, `architecture.md`, `claims-and-boundaries.md`, `verification.md`, `faq.md`
@@ -205,15 +205,8 @@ BETO v4.2 blocked what was NOT_STATED. BETO v4.3 also validates what IS declared
 - `CHANGELOG.md` added
 - Hierarchy enforced throughout: Protocol → Executor (reference implementation) → Skill (integration path)
 - `DOCUMENTACION_OFICIAL_BETO.md` and `BETO_INSTRUCTIVO.md` preserved intact as full reference documents
-
----
-
-## [4.2.2] — 2026-03-14
-
-**BETO Skill — Assisted Mode override evaluation + version display**
-
-- Override evaluation rule added: when operator overrides a BETO_ASSISTED resolution, Skill evaluates scope consistency before accepting — triggers `BETO_GAP [ESCALATED]` if override introduces external dependencies or scope expansion
-- Version display added at session start: `BETO Skill v4.2.1 — github.com/...`
+- Override evaluation rule added to Skill: when operator overrides a BETO_ASSISTED resolution, Skill evaluates scope consistency before accepting — triggers `BETO_GAP [ESCALATED]` if override introduces external dependencies or scope expansion
+- Version display added at Skill session start: `BETO Skill v4.2.2 — github.com/...`
 - Update instructions added: operators can check installed version and update via `cp -r`
 
 ---

@@ -40,7 +40,7 @@ G-1, G-2, and G-3 are structural halts. The cycle cannot proceed without explici
 A source file whose BETO-TRACE annotations reference IDs not in the approved TRACE_REGISTRY is unauthorized and cannot be delivered. This is enforced by the verification step, not by convention.
 
 **5. The empirical record is verifiable.**
-Three systems have been fully specified and materialized under BETO v4.2: 43 source files, 100% TRACE_VERIFIED, 0 silent completions. The artifacts are in this repository and can be independently inspected.
+Three systems have been fully specified and materialized under BETO: 43 source files, 100% TRACE_VERIFIED, 0 silent completions. The artifacts are in this repository and can be independently inspected.
 
 ---
 
