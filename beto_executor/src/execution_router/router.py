@@ -261,9 +261,10 @@ class ExecutionRouter:
     def _persist_decision(self, decision: RouteDecision) -> None:
         """
         BETO-TRACE: BETO_V44.SEC8.DECISION.ROUTING_CONFIG
+        BETO-TRACE: BETO_V45.SEC8.DECISION.DUAL_WRITE_PARITY
 
-        Persist routing decision to .beto/routing/decisions/.
-        Stored as JSON for machine readability and audit.
+        Persist routing decision to .beto/routing/decisions/ (JSON)
+        and to SQLite (dual-write, Phase 1).
         """
         decisions_dir = self.beto_dir / "routing" / "decisions"
         decisions_dir.mkdir(parents=True, exist_ok=True)
@@ -272,12 +273,20 @@ class ExecutionRouter:
             json.dumps(decision.to_dict(), ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
+        # v4.5 dual-write — SQLite replica
+        try:
+            from persistence.writers.routing_writer import RoutingWriter
+            RoutingWriter.write_decision(self.beto_dir, decision)
+        except Exception as e:
+            print(f"[PERSISTENCE] Warning: DB write for decision {decision.decision_id} failed — {e}")
 
     def _persist_promotion(self, promotion: RoutePromotion) -> None:
         """
         BETO-TRACE: BETO_V44.SEC8.DECISION.ROUTING_CONFIG
+        BETO-TRACE: BETO_V45.SEC8.DECISION.DUAL_WRITE_PARITY
 
-        Persist route promotion to .beto/routing/promotions/.
+        Persist route promotion to .beto/routing/promotions/ (JSON)
+        and to SQLite (dual-write, Phase 1).
         """
         promotions_dir = self.beto_dir / "routing" / "promotions"
         promotions_dir.mkdir(parents=True, exist_ok=True)
@@ -286,3 +295,9 @@ class ExecutionRouter:
             json.dumps(promotion.to_dict(), ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
+        # v4.5 dual-write — SQLite replica
+        try:
+            from persistence.writers.routing_writer import RoutingWriter
+            RoutingWriter.write_promotion(self.beto_dir, promotion)
+        except Exception as e:
+            print(f"[PERSISTENCE] Warning: DB write for promotion {promotion.promotion_id} failed — {e}")
