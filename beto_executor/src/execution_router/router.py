@@ -301,3 +301,14 @@ class ExecutionRouter:
             RoutingWriter.write_promotion(self.beto_dir, promotion)
         except Exception as e:
             print(f"[PERSISTENCE] Warning: DB write for promotion {promotion.promotion_id} failed — {e}")
+        # v4.5 — invalidate referenced snapshots in DB when a promotion occurs
+        if promotion.snapshots_invalidated:
+            try:
+                from persistence.writers.snapshot_writer import SnapshotDBWriter
+                db_writer = SnapshotDBWriter(beto_dir=self.beto_dir, cycle_id=self.cycle_id)
+                for snap in promotion.snapshots_invalidated:
+                    sid = snap.get("snapshot_id", "")
+                    if sid:
+                        db_writer.invalidate(sid, promotion.promotion_id)
+            except Exception as e:
+                print(f"[PERSISTENCE] Warning: snapshot invalidation failed for {promotion.promotion_id} — {e}")

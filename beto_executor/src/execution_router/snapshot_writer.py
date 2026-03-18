@@ -30,11 +30,25 @@ class SnapshotWriter:
 
     def __init__(self, beto_dir: Path, ciclo_id: str) -> None:
         # BETO-TRACE: BETO_V44.SEC8.DECISION.ROUTING_CONFIG (storage path OQ-2)
+        # BETO-TRACE: BETO_V45.SEC8.DECISION.SNAPSHOT_COUNTER_RESUME_SAFE
         self.beto_dir = beto_dir
         self.ciclo_id = ciclo_id
-        self._counters: dict[str, int] = {"LC": 0, "CS": 0, "AQ": 0, "MS": 0}
         self.snapshots_dir = beto_dir / "snapshots"
         self.snapshots_dir.mkdir(parents=True, exist_ok=True)
+        # Initialize counters from existing files so resumed cycles never reuse IDs.
+        # E.g. if LC-2026-0003.json exists, the next LC counter starts at 4.
+        self._counters: dict[str, int] = {}
+        for prefix in ("LC", "CS", "AQ", "MS"):
+            existing = list(self.snapshots_dir.glob(f"{prefix}-*.json"))
+            if existing:
+                max_n = max(
+                    int(f.stem.split("-")[-1])
+                    for f in existing
+                    if f.stem.split("-")[-1].isdigit()
+                )
+                self._counters[prefix] = max_n
+            else:
+                self._counters[prefix] = 0
 
     # ─── Public API ───────────────────────────────────────────────────────────
 

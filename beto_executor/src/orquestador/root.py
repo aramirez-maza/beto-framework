@@ -129,11 +129,24 @@ class BETOExecutorRoot:
 
         # — v4.5: Initialize SQLite persistence layer —
         # BETO-TRACE: BETO_V45.SEC1.INTENT.SQLITE_PERSISTENCE
+        # BETO-TRACE: BETO_V45.SEC8.DECISION.CYCLE_BEFORE_ROUTING_FK
+        # Cycle row is written BEFORE execution_router.route() so that the FK
+        # on routing_decisions(cycle_id) is satisfied when the dual-write fires.
         try:
             init_db(beto_dir)
             project_id = CycleWriter.ensure_project(beto_dir, self.cycle_output_dir)
+            CycleWriter.write_cycle(
+                beto_dir=beto_dir,
+                project_id=project_id,
+                cycle_id=ciclo_id,
+                idea_raw=idea_raw,
+                cycle_dir=cycle_dir,
+                reasoning_model=self.reasoning_model,
+                code_model=self.code_model,
+                g4_configured=self.g4_configurado,
+            )
         except Exception as e:
-            print(f"[PERSISTENCE] Warning: DB init failed — {e} (continuing without DB)")
+            print(f"[PERSISTENCE] Warning: DB init/cycle write failed — {e} (continuing without DB)")
             project_id = None
 
         execution_router = ExecutionRouter(cycle_id=ciclo_id, beto_dir=beto_dir)
@@ -152,7 +165,7 @@ class BETOExecutorRoot:
         route_type = routing_decision.route_selected.value
         print(f"[ROOT] Ruta inicial: {route_type} (score={routing_decision.raw_score:.1f})")
 
-        # v4.5 — register cycle in DB now that we have route info
+        # Update cycle with route info now that routing is resolved
         if project_id is not None:
             try:
                 CycleWriter.write_cycle(
@@ -168,7 +181,7 @@ class BETOExecutorRoot:
                     g4_configured=self.g4_configurado,
                 )
             except Exception as e:
-                print(f"[PERSISTENCE] Warning: cycle DB write failed — {e}")
+                print(f"[PERSISTENCE] Warning: cycle route update failed — {e}")
 
         state_manager.aplicar_evento(
             ciclo_id,
@@ -256,10 +269,21 @@ class BETOExecutorRoot:
         if motor_destino == "MOTOR_RAZONAMIENTO":
             # v4.4 — restore routing context for resumed cycle
             beto_dir = cycle_dir / ".beto"
-            # v4.5 — ensure DB is initialized for resumed cycles
+            # v4.5 — ensure DB is initialized. Write cycle row BEFORE routing
+            # so the FK on routing_decisions(cycle_id) is satisfied.
             try:
                 init_db(beto_dir)
                 project_id = CycleWriter.ensure_project(beto_dir, self.cycle_output_dir)
+                CycleWriter.write_cycle(
+                    beto_dir=beto_dir,
+                    project_id=project_id,
+                    cycle_id=ciclo_id,
+                    idea_raw=idea_raw,
+                    cycle_dir=cycle_dir,
+                    reasoning_model=self.reasoning_model,
+                    code_model=self.code_model,
+                    g4_configured=self.g4_configurado,
+                )
             except Exception as e:
                 print(f"[PERSISTENCE] Warning: DB init failed on resume — {e}")
                 project_id = None
@@ -277,6 +301,23 @@ class BETOExecutorRoot:
             )
             route_type = routing_decision.route_selected.value
             print(f"[ROOT] Ruta reanudada: {route_type} (score={routing_decision.raw_score:.1f})")
+            # Update cycle with resolved route info
+            if project_id is not None:
+                try:
+                    CycleWriter.write_cycle(
+                        beto_dir=beto_dir,
+                        project_id=project_id,
+                        cycle_id=ciclo_id,
+                        idea_raw=idea_raw,
+                        cycle_dir=cycle_dir,
+                        route_type=route_type,
+                        complexity_score=routing_decision.raw_score,
+                        reasoning_model=self.reasoning_model,
+                        code_model=self.code_model,
+                        g4_configured=self.g4_configurado,
+                    )
+                except Exception as e:
+                    print(f"[PERSISTENCE] Warning: cycle route update failed on resume — {e}")
 
             motor_raz = MotorRazonamiento(
                 ciclo_id=ciclo_id,

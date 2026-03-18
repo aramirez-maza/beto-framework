@@ -52,7 +52,27 @@ def _classify_file(file_name: str) -> tuple[str, str, str]:
 
 
 class ArtifactDBWriter:
-    """Writes artifact records to SQLite."""
+    """
+    Writes artifact records to SQLite.
+
+    Artifact semantics — "current" vs "previous version":
+
+    BETO artifacts are files on disk. When a step is re-run (after gate
+    rejection or retroceso), the file is overwritten. There is no notion
+    of "previous version" in the DB — the ON CONFLICT UPDATE strategy means
+    the latest write wins, mirroring what happens on disk.
+
+    "Vigente" (current) = present in the artifacts table with the latest
+    updated_at. Every row in this table represents the most recent
+    materialization of that (cycle_id, file_path) pair.
+
+    Version history is not tracked here — that is the responsibility of
+    the VCS (git). This keeps the schema simple and Phase 2 rendering
+    deterministic: all artifacts rows are implicitly current.
+
+    If explicit version tracking is needed in the future, add a `generation`
+    INTEGER column (default 1, incremented on each upsert) as a Phase 3 task.
+    """
 
     def __init__(self, beto_dir: Path, cycle_id: str) -> None:
         self.beto_dir = beto_dir
