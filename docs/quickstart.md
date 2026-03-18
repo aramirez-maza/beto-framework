@@ -10,7 +10,7 @@ If you want to understand the protocol before running anything, start with [docs
 
 ## Executor Quickstart (Reference Implementation)
 
-The automated pipeline runs the full BETO Protocol deterministically with two LLM backends.
+The automated pipeline runs the full BETO Protocol deterministically with two LLM backends. Since v4.4, the Executor automatically selects the execution path (LIGHT / PARTIAL / FULL) based on the complexity of each sub-problem before running Steps 0–9.
 
 ### Prerequisites
 
@@ -23,26 +23,77 @@ The automated pipeline runs the full BETO Protocol deterministically with two LL
 ```bash
 cd beto_executor/src
 pip install openai
-
-export OPENAI_API_BASE="http://localhost:8000/v1"
-export OPENAI_API_KEY="your-key"
 ```
+
+The Executor takes all configuration as CLI flags — no environment variables required.
 
 ### Run
 
 ```bash
-python main.py "Your idea here"
+python3 main.py \
+  --idea "your idea here" \
+  --reasoning-model claude-sonnet-4-6 \
+  --code-model qwen-coder \
+  --litellm-url http://localhost:8000 \
+  --api-key local \
+  --cycle-dir ./cycles \
+  --templates-dir ../../skills/beto-framework/references
 ```
+
+Or pass the idea from a file:
+
+```bash
+python3 main.py \
+  --idea-file /path/to/idea.txt \
+  --reasoning-model claude-sonnet-4-6 \
+  --code-model qwen-coder \
+  --litellm-url http://localhost:8000 \
+  --api-key local \
+  --cycle-dir ./cycles \
+  --templates-dir ../../skills/beto-framework/references
+```
+
+**Key flags:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--idea` | IDEA_RAW as a string | — |
+| `--idea-file` | Path to a text file with the IDEA_RAW | — |
+| `--reasoning-model` | LLM for Steps 0–9 | `gpt-4o` |
+| `--code-model` | LLM for Step 10 | `gpt-4o` |
+| `--litellm-url` | LiteLLM gateway base URL | `http://localhost:8000` |
+| `--api-key` | API key for the gateway | `none` |
+| `--cycle-dir` | Output directory for cycles | `./cycles` |
+| `--templates-dir` | Path to BETO framework templates | none (degraded mode) |
+| `--g4` | Enable optional Gate G-4 | off |
 
 The Executor runs Steps 0–9 with the reasoning motor, pauses at each gate (G-1, G-2, G-3) for your approval, then runs Step 10 with the code motor.
 
+### What you will see at startup
+
+```
+[ROOT] Ruta inicial: BETO_FULL_PATH (score=31.0)
+[Motor Razonamiento] Ejecutando Paso 0...
+```
+
+The first line is the v4.4 routing decision — the Executor evaluates the complexity of your idea and selects the execution path automatically before any LLM call. This decision is recorded as a `ROUTING_DECISION_RECORD` in `<cycle-dir>/<cycle-id>/.beto/routing/decisions/`.
+
 ### Expected result
 
-A cycle directory under `src/cycles/` containing all BETO artifacts (PASO_0, BETO_CORE_DRAFT, BETO_SYSTEM_GRAPH, CIERRE_ASISTIDO, MANIFEST_PROYECTO, source files) with full BETO-TRACE annotations and a verified TRACE_REGISTRY.
+A cycle directory under `--cycle-dir` containing:
+
+- All BETO specification artifacts: `PASO_0_EVALUACION.md`, `BETO_CORE_DRAFT.md`, `BETO_SYSTEM_GRAPH.md`, `CIERRE_ASISTIDO_OPERATIVO.md`, `MANIFEST_PROYECTO.md`
+- Source files with full BETO-TRACE annotations and a verified TRACE_REGISTRY
+- A `.beto/` directory with v4.4 operational artifacts:
+  - `.beto/routing/decisions/` — ROUTING_DECISION_RECORD for every routing decision
+  - `.beto/snapshots/` — context snapshots (LC, CS, AQ, MS) per execution path
+  - `.beto/project_index.json` — artifact index generated at handoff
 
 ### Common failure points
 
 **Gate rejection requires manual rollback.** If you reject at a gate, the Executor does not automatically regenerate. You will need to restart the relevant step manually or resume from the last approved state.
+
+**`--templates-dir` is strongly recommended.** Without it, the Executor runs in degraded mode: the LLM does not receive BETO framework templates as context and output quality will vary. Point it to `skills/beto-framework/references/` in this repository.
 
 **Step 10 requires a code model.** The reasoning motor (Steps 0–9) uses any OpenAI-compatible API. Step 10 is optimized for a local code model. If you don't have one, Step 10 can be run with the same reasoning model, but output quality may vary.
 
