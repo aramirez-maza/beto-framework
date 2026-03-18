@@ -115,6 +115,48 @@ def get_gate_decisions(beto_dir: Path, cycle_id: str) -> list[dict]:
         conn.close()
 
 
+def get_route_promotions(beto_dir: Path, cycle_id: str) -> list[dict]:
+    """Return all route promotions for a cycle in order."""
+    conn = get_connection(beto_dir)
+    try:
+        rows = conn.execute(
+            "SELECT * FROM route_promotions WHERE cycle_id = ? ORDER BY created_at",
+            (cycle_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def get_latest_gates(beto_dir: Path, cycle_id: str) -> dict:
+    """
+    Return the latest decision per gate as a dict keyed by gate name.
+    When the same gate has multiple decisions, the most recent one wins.
+    """
+    conn = get_connection(beto_dir)
+    try:
+        rows = conn.execute(
+            """
+            SELECT gate, decision, paso, operator_notes, decided_at
+            FROM gate_decisions
+            WHERE cycle_id = ?
+            ORDER BY decided_at ASC
+            """,
+            (cycle_id,),
+        ).fetchall()
+        result: dict = {}
+        for row in rows:
+            result[row["gate"]] = {
+                "decision": row["decision"],
+                "paso": row["paso"],
+                "operator_notes": row["operator_notes"],
+                "decided_at": row["decided_at"],
+            }
+        return result
+    finally:
+        conn.close()
+
+
 def get_all_cycles(beto_dir: Path) -> list[dict]:
     """Return all cycles across all projects (for cross-cycle querying)."""
     conn = get_connection(beto_dir)

@@ -107,6 +107,45 @@ class CycleWriter:
             conn.close()
 
     @staticmethod
+    def update_system_info(
+        beto_dir: Path,
+        cycle_id: str,
+        system_intent: str = "",
+        system_name: str = "",
+        system_boundaries: str = "{}",
+        stable_decisions: str = "[]",
+    ) -> None:
+        """
+        Update the Phase 2 system-info columns on the cycles row.
+        system_boundaries and stable_decisions are JSON strings.
+        Only updates if the cycle row exists — no-op otherwise.
+        """
+        conn = get_connection(beto_dir)
+        try:
+            with conn:
+                conn.execute(
+                    """
+                    UPDATE cycles
+                    SET system_intent    = ?,
+                        system_name      = ?,
+                        system_boundaries = ?,
+                        stable_decisions = ?,
+                        updated_at       = ?
+                    WHERE cycle_id = ?
+                    """,
+                    (
+                        system_intent,
+                        system_name,
+                        system_boundaries,
+                        stable_decisions,
+                        datetime.now(timezone.utc).isoformat(),
+                        cycle_id,
+                    ),
+                )
+        finally:
+            conn.close()
+
+    @staticmethod
     def mark_completed(beto_dir: Path, cycle_id: str) -> None:
         """Mark a cycle as COMPLETED."""
         conn = get_connection(beto_dir)

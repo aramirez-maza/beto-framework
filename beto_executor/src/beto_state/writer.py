@@ -33,12 +33,19 @@ class BETOStateWriter:
     """
     Actualiza BETO_STATE.json en el cycle_dir después de cada paso.
     Thread-safe no requerido — BETO_EXECUTOR es single-process.
+
+    Phase 2 (v4.5): when a .beto/beto.db exists under cycle_dir, the writer
+    also pushes extracted state to SQLite and renders BETO_STATE.json from
+    SQLite as the canonical source.  Falls back to the legacy markdown-based
+    format if any DB operation fails — the pipeline is never blocked.
     """
 
     def __init__(self, cycle_dir: Path, ciclo_id: str):
         self.cycle_dir = cycle_dir
         self.ciclo_id = ciclo_id
         self.state_path = cycle_dir / BETO_STATE_FILENAME
+        # Phase 2 — .beto lives at cycle_dir/.beto (same convention as motor.py)
+        self._beto_dir = cycle_dir / ".beto"
 
     def update(self, paso: int) -> BETOState:
         """
@@ -77,6 +84,12 @@ class BETOStateWriter:
         state.extraction_warnings = list(dict.fromkeys(warnings))
 
         self._save(state)
+
+        # Phase 2: push extracted fields to SQLite, then re-render from DB
+        if (self._beto_dir / "beto.db").exists():
+            self._push_to_db(state, paso)
+            self._render_phase2()
+
         return state
 
     # ------------------------------------------------------------------
@@ -119,6 +132,84 @@ class BETOStateWriter:
 
     def _save(self, state: BETOState) -> None:
         self.state_path.write_text(state.to_json(), encoding="utf-8")
+
+    # ── Phase 2 helpers ────────────────────────────────────────────────────
+
+    def _push_to_db(self, state: BETOState, paso: int) -> None:
+        """
+        Push system-info and OQ state to SQLite so state_reader can render
+        a canonical payload from the DB.  Non-fatal — any failure is logged
+        to stderr and the pipeline continues with the legacy JSON format.
+        """
+        import json as _json
+        import sys
+        try:
+            from persistence.writers.cycle_writer import CycleWriter
+            from persistence.writers.oq_writer import OQWriter
+            from dataclasses import asdict
+
+            system_boundaries = _json.dumps(
+                {"in": state.system_boundaries_in, "out": state.system_boundaries_out},
+                ensure_ascii=False,
+            )
+            stable_decisions = _json.dumps(state.stable_decisions, ensure_ascii=False)
+
+            CycleWriter.update_system_info(
+                beto_dir=self._beto_dir,
+                cycle_id=self.ciclo_id,
+                system_intent=state.system_intent,
+                system_name=state.system_name,
+                system_boundaries=system_boundaries,
+                stable_decisions=stable_decisions,
+            )
+
+            oq_writer = OQWriter(self._beto_dir, self.ciclo_id)
+            oq_writer.sync_from_dicts(
+                oqs_abiertas=[asdict(oq) for oq in state.oqs_abiertas],
+                oqs_cerradas=[asdict(oq) for oq in state.oqs_cerradas],
+                paso=paso,
+            )
+        except Exception as exc:
+            print(f"[BETO_STATE] Warning: DB push failed — {exc}", file=sys.stderr)
+
+    def _render_phase2(self) -> None:
+        """
+        Render BETO_STATE.json from SQLite (Phase 2 canonical format).
+
+        The output is a superset of the legacy format:
+          - All Phase 2 canonical keys (cycle_id, project_id, route_mode, …)
+          - Legacy keys preserved as aliases (ciclo_id, paso_actual,
+            oqs_abiertas, oqs_cerradas) so that context_builder.py and
+            _load_or_create() continue to work without modification.
+
+        Falls back silently to the already-written legacy JSON if the DB
+        render fails.
+        """
+        import json as _json
+        import sys
+        try:
+            from persistence.readers.state_reader import build_state_payload
+
+            # Build Phase 2 payload from DB
+            payload = build_state_payload(self._beto_dir, self.ciclo_id)
+
+            # Merge: start from the legacy JSON already on disk so that fields
+            # not yet tracked in SQLite (nodos, routing_decisions summary, …)
+            # are preserved.  Phase 2 keys win on conflict.
+            try:
+                legacy = _json.loads(self.state_path.read_text(encoding="utf-8"))
+            except Exception:
+                legacy = {}
+
+            merged = {**legacy, **payload}
+            self.state_path.write_text(
+                _json.dumps(merged, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+        except Exception as exc:
+            print(f"[BETO_STATE] Warning: Phase 2 render failed — {exc}", file=sys.stderr)
+
+    # ── File I/O ───────────────────────────────────────────────────────────
 
     def _read_artifact(self, nombre: str) -> str | None:
         ruta = self.cycle_dir / nombre

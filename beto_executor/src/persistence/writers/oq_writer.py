@@ -96,3 +96,75 @@ class OQWriter:
             conn.close()
 
         return count
+
+    def sync_from_dicts(
+        self,
+        oqs_abiertas: list[dict],
+        oqs_cerradas: list[dict],
+        paso: int,
+    ) -> int:
+        """
+        Sync OQs from already-parsed dicts (e.g. from dataclasses.asdict(oq)).
+        Dict keys match OQ dataclass field names:
+          id, texto, modo_cierre, resolucion, oq_type, critical,
+          execution_state, execution_readiness_check, requestion_count
+        Returns the number of rows upserted.
+        """
+        count = 0
+        conn = get_connection(self.beto_dir)
+        try:
+            with conn:
+                for oq in oqs_abiertas:
+                    conn.execute(
+                        """
+                        INSERT OR REPLACE INTO open_questions (
+                            oq_id, cycle_id, texto, oq_type, critical,
+                            estado, modo_cierre, resolucion,
+                            execution_state, readiness_check, requestion_count,
+                            paso_registrada, paso_cerrada
+                        ) VALUES (?, ?, ?, ?, ?, 'ABIERTA', NULL, NULL, ?, ?, ?, ?, NULL)
+                        """,
+                        (
+                            oq.get("id", ""),
+                            self.cycle_id,
+                            oq.get("texto", ""),
+                            oq.get("oq_type", "NOT_CLASSIFIED"),
+                            1 if oq.get("critical") else 0,
+                            oq.get("execution_state", "PENDING"),
+                            oq.get("execution_readiness_check", "NOT_EVALUATED"),
+                            oq.get("requestion_count", 0),
+                            paso,
+                        ),
+                    )
+                    count += 1
+
+                for oq in oqs_cerradas:
+                    conn.execute(
+                        """
+                        INSERT OR REPLACE INTO open_questions (
+                            oq_id, cycle_id, texto, oq_type, critical,
+                            estado, modo_cierre, resolucion,
+                            execution_state, readiness_check, requestion_count,
+                            paso_registrada, paso_cerrada
+                        ) VALUES (?, ?, ?, ?, ?, 'CERRADA', ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            oq.get("id", ""),
+                            self.cycle_id,
+                            oq.get("texto", ""),
+                            oq.get("oq_type", "NOT_CLASSIFIED"),
+                            1 if oq.get("critical") else 0,
+                            oq.get("modo_cierre", ""),
+                            oq.get("resolucion", ""),
+                            oq.get("execution_state", "PENDING"),
+                            oq.get("execution_readiness_check", "NOT_EVALUATED"),
+                            oq.get("requestion_count", 0),
+                            paso,
+                            paso,
+                        ),
+                    )
+                    count += 1
+        finally:
+            conn.close()
+
+        return count

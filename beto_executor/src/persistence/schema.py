@@ -188,6 +188,16 @@ _TABLES = [
     """,
 ]
 
+# ─── Column migrations ────────────────────────────────────────────────────────
+# ADD COLUMN uses try/except because SQLite has no IF NOT EXISTS for ALTER TABLE.
+# Safe to run on every init — failures mean the column already exists.
+_MIGRATIONS = [
+    "ALTER TABLE cycles ADD COLUMN system_intent TEXT DEFAULT ''",
+    "ALTER TABLE cycles ADD COLUMN system_name TEXT DEFAULT ''",
+    "ALTER TABLE cycles ADD COLUMN system_boundaries TEXT DEFAULT '{}'",
+    "ALTER TABLE cycles ADD COLUMN stable_decisions TEXT DEFAULT '[]'",
+]
+
 _INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_cycles_project ON cycles(project_id)",
     "CREATE INDEX IF NOT EXISTS idx_routing_decisions_cycle ON routing_decisions(cycle_id)",
@@ -221,6 +231,11 @@ def init_db(beto_dir: Path) -> Path:
                 conn.execute(ddl)
             for idx in _INDEXES:
                 conn.execute(idx)
+            for migration in _MIGRATIONS:
+                try:
+                    conn.execute(migration)
+                except Exception:
+                    pass  # Column already exists
 
             # Record schema version if not already present
             existing = conn.execute("SELECT version FROM schema_version").fetchone()
