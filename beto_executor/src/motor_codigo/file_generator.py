@@ -47,7 +47,13 @@ def _build_stubs_from_symbols(stub_symbols: str) -> list[str]:
 
     lines = []
     for section in [s.strip() for s in stub_symbols.split(";") if s.strip()]:
-        if section.startswith("funcs:"):
+        if section.startswith("import:"):
+            # Cross-module import contract — emitted as a real Python import statement
+            imp = section[7:].strip()
+            if imp:
+                lines.append(imp)
+                lines.append("")
+        elif section.startswith("funcs:"):
             fn_str = section[6:].strip()
             for raw in _split_by_top_comma(fn_str):
                 sig = raw.strip()

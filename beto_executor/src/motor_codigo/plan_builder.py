@@ -440,65 +440,65 @@ def obtener_plan(handoff_path=None) -> list[EntradaPlan]:
 
 def _build_dynamic_plan(manifest_path, handoff_path) -> list[EntradaPlan]:
     """
-    Lee MANIFEST_PROYECTO.md y construye el plan dinámicamente.
-    Soporta dos formatos:
-    - Tabla sección 1.2: una fila por archivo (todo-list style)
-    - Tablas WAVE: múltiples archivos por fila en columna "Archivos" (v2 style)
-    """
-    import re
+    Builds a cross-module-aware materialization plan from MANIFEST_PROYECTO.md
+    and TRACE_REGISTRY files.
 
+    Improvement over the original version:
+    - Parses SEC4.FIELD entries → identifies shared data model (e.g. FileEntry)
+    - Parses SEC6.COMPONENT entries → derives module interface specs
+    - Parses SEC7.PHASE entries → extracts input/output contracts
+    - Assigns shared model ownership to the first producer module
+    - Injects import stubs into all consumer modules
+    - Result: LLM receives explicit interface contracts per file, preventing
+      shared type duplication across modules.
+    """
     content = manifest_path.read_text(encoding="utf-8")
 
-    # Estrategia: extraer todos los paths de código del documento
-    # Soporta tablas sección 1.2 (una fila/archivo) y tablas WAVE (múltiples por fila)
-    archivos_vistos = []
-    seen = set()
-
-    for line in content.split("\n"):
-        if not "|" in line and not "`" in line:
-            continue
-        # Saltar líneas de header de tabla
-        if re.match(r"\s*\|[-\s|]+\|\s*$", line):
-            continue
-        # Extraer todos los paths con extensión dentro de backticks
-        for m in re.finditer(r"`([^`]+\.(py|yaml|yml|toml|json|html|css|js|md|txt|cfg|ini))`", line):
-            nombre = m.group(1)
-            # Saltar si parece artefacto BETO (todo caps o empieza con BETO/TRACE/MANIFEST/PHASE)
-            if re.match(r"(BETO_|TRACE_|MANIFEST_|PHASE_|PASO_|CIERRE)", nombre):
-                continue
-            # Saltar headers
-            if nombre.lower() in ("archivo", "file", "archivos", "files"):
-                continue
-            if nombre not in seen:
-                seen.add(nombre)
-                # Intentar extraer nodo de la misma fila
-                cols = [c.strip() for c in line.split("|") if c.strip()]
-                nodo = ""
-                for col in cols:
-                    if re.search(r"P-\d+|N-\d+", col):
-                        nodo = re.search(r"P-\d+[\.\d]*|N-\d+", col).group(0)
-                        break
-                archivos_vistos.append({"nombre": nombre, "nodo": nodo, "desc": ""})
-
+    # --- Phase 1: Extract file list ---
+    archivos_vistos = _extract_files_from_manifest(content)
     if not archivos_vistos:
-        # Estrategia 2: derivar archivos Python desde BETO_COREs listados en SECCIÓN 8
         archivos_vistos = _derivar_desde_seccion8(content)
-        if not archivos_vistos:
-            return []
+    if not archivos_vistos:
+        return []
 
-    # Descubrir BETO_COREs y TRACE_REGISTRYs disponibles
+    # --- Phase 2: Discover artifacts ---
     beto_cores = sorted(p.name for p in handoff_path.glob("BETO_CORE_*.md"))
-    registries = sorted(p.name for p in handoff_path.glob("TRACE_REGISTRY_*.md"))
+    registry_paths = sorted(handoff_path.glob("TRACE_REGISTRY_*.md"))
+    registry_names = [p.name for p in registry_paths]
 
-    # Índice del plan hardcodeado para recuperar stub_symbols cuando el archivo coincide
+    # Executor self-spec shortcut
     hardcoded_index = {e.nombre_archivo: e for e in PLAN_MATERIALIZACION}
 
+    # --- Phase 3: Parse TRACE_REGISTRY entries ---
+    all_entries: dict = {}
+    for reg_path in registry_paths:
+        try:
+            all_entries.update(_parse_registry_entries(reg_path.read_text(encoding="utf-8")))
+        except Exception:
+            pass
+    all_ids: set = set(all_entries.keys())
+
+    # Group by section type
+    sec4_fields = {id_: d for id_, d in all_entries.items() if ".SEC4.FIELD." in id_}
+    sec6 = {id_: d for id_, d in all_entries.items()
+            if ".SEC6.COMPONENT." in id_ or ".SEC6.MODEL." in id_}
+    sec7 = {id_: d for id_, d in all_entries.items() if ".SEC7.PHASE." in id_}
+
+    # --- Phase 4: Identify shared data model from fields + components ---
+    shared_model = _identify_shared_model(sec4_fields, sec6)
+
+    # --- Phase 5: Find which file owns the shared model ---
+    if shared_model:
+        owner_file = _find_shared_model_owner(archivos_vistos, sec6, sec7, shared_model)
+        shared_model["owner_file"] = owner_file
+
+    # --- Phase 6: Assemble plan with cross-module awareness ---
     plan = []
     for i, f in enumerate(archivos_vistos, 1):
         nombre = f["nombre"]
-        nodo = f["nodo"]
+        nodo = f.get("nodo", "")
 
-        # Si el archivo coincide exactamente con el plan hardcodeado, usar sus metadatos ricos
+        # Executor self-spec: use rich hardcoded metadata
         if nombre in hardcoded_index:
             entrada = hardcoded_index[nombre]
             plan.append(EntradaPlan(
@@ -512,9 +512,13 @@ def _build_dynamic_plan(manifest_path, handoff_path) -> list[EntradaPlan]:
             ))
             continue
 
-        # Sistema distinto al executor: asignar BETO_CORE y TRACE_REGISTRY por nombre
         beto_core = _match_artifact(nombre, nodo, beto_cores, "BETO_CORE_DRAFT.md")
-        trace_reg = _match_artifact(nombre, nodo, registries, registries[0] if registries else "")
+        trace_reg = _match_artifact(nombre, nodo, registry_names,
+                                    registry_names[0] if registry_names else "")
+
+        is_owner = bool(shared_model and shared_model.get("owner_file") == nombre)
+        stub = _build_stub_symbols(nombre, sec6, sec7, shared_model, is_owner, all_ids)
+        primary = _select_primary_ids_dynamic(nombre, all_ids)
 
         plan.append(EntradaPlan(
             orden=i,
@@ -522,11 +526,598 @@ def _build_dynamic_plan(manifest_path, handoff_path) -> list[EntradaPlan]:
             nombre_archivo=nombre,
             beto_core_origen=beto_core,
             trace_registry_ref=trace_reg,
-            stub_symbols="",   # LLM implementa libremente desde BETO_CORE
-            primary_ids=[],    # Sin BETO-TRACE forzado para sistemas externos
+            stub_symbols=stub,
+            primary_ids=primary,
         ))
 
     return plan
+
+
+# ---------------------------------------------------------------------------
+# Registry parser
+# ---------------------------------------------------------------------------
+
+def _parse_registry_entries(content: str) -> dict:
+    """
+    Parse a TRACE_REGISTRY.md and extract all ID entries.
+
+    Format (inside ``` code blocks):
+      ID: SYSTEM.SECn.TYPE.ELEMENT
+        Source section: ...
+        Declaration: text that may span
+                     multiple lines
+        Input:  text  (SEC7 only)
+        Output: text  (SEC7 only)
+        Status: ...
+
+    Returns: {id_string: {declaration, input, output}}
+    """
+    import re
+
+    entries: dict = {}
+    code_blocks = re.findall(r"```[^\n]*\n(.*?)```", content, re.DOTALL)
+    for block in code_blocks:
+        parts = re.split(r"(?m)^ID:\s+", block)
+        for part in parts[1:]:
+            lines = part.strip().split("\n")
+            if not lines:
+                continue
+            id_ = lines[0].strip()
+            # IDs have no spaces; skip malformed lines
+            if not id_ or " " in id_:
+                continue
+            data: dict = {"declaration": "", "input": "", "output": ""}
+            current_key = None
+            current_val: list = []
+
+            for line in lines[1:]:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                lc = stripped.lower()
+                if lc.startswith("declaration:"):
+                    if current_key:
+                        data[current_key] = " ".join(current_val).strip()
+                    current_key = "declaration"
+                    current_val = [stripped[12:].strip()]
+                elif lc.startswith("input:"):
+                    if current_key:
+                        data[current_key] = " ".join(current_val).strip()
+                    current_key = "input"
+                    current_val = [stripped[6:].strip()]
+                elif lc.startswith("output:"):
+                    if current_key:
+                        data[current_key] = " ".join(current_val).strip()
+                    current_key = "output"
+                    current_val = [stripped[7:].strip()]
+                elif (lc.startswith("status:") or lc.startswith("source section:")
+                      or lc.startswith("traceability") or lc.startswith("oq reference:")):
+                    if current_key:
+                        data[current_key] = " ".join(current_val).strip()
+                    current_key = None
+                    current_val = []
+                elif current_key is not None:
+                    current_val.append(stripped)
+
+            if current_key:
+                data[current_key] = " ".join(current_val).strip()
+            entries[id_] = data
+
+    return entries
+
+
+# ---------------------------------------------------------------------------
+# Shared model identification
+# ---------------------------------------------------------------------------
+
+def _identify_shared_model(sec4_fields: dict, sec6: dict) -> "dict | None":
+    """
+    Identify the shared data model from SEC4.FIELD and SEC6 entries.
+
+    - SEC4.FIELD entries define the fields of the core unit of processing
+    - A SEC6 component ending in _ENTRY, _RECORD, _ITEM etc. names the class
+    - Returns: {class_name, fields, component_id, owner_file} or None
+    """
+    import re
+
+    if not sec4_fields:
+        return None
+
+    # Field names from SEC4.FIELD IDs
+    fields = [id_.split(".")[-1].lower() for id_ in sorted(sec4_fields.keys())]
+    if not fields:
+        return None
+
+    # Look for a data-structure SEC6 component to derive class name
+    data_struct_pat = re.compile(r"(_ENTRY|_RECORD|_ITEM|_UNIT|_OBJECT|_ENTITY|_NODE|_STRUCT)$")
+    class_name = None
+    struct_comp_id = None
+    for id_ in sec6:
+        element = id_.split(".")[-1]
+        if data_struct_pat.search(element):
+            class_name = "".join(w.capitalize() for w in element.split("_"))
+            struct_comp_id = id_
+            break
+
+    if class_name is None:
+        # Derive from first field: file_path → FileEntry
+        first = fields[0].split("_")[0].capitalize() if fields else "Data"
+        class_name = f"{first}Entry"
+
+    return {
+        "class_name": class_name,
+        "fields": fields,
+        "component_id": struct_comp_id,
+        "owner_file": None,  # filled by _find_shared_model_owner
+    }
+
+
+_STOP_WORDS = {
+    "a", "an", "the", "of", "in", "for", "to", "and", "or", "is", "its",
+    "by", "that", "each", "any", "as", "on", "at", "be", "are", "with",
+    "from", "this", "it", "not", "more", "than", "one", "only", "all",
+    "has", "have", "can", "no", "into", "their", "which",
+}
+
+
+def _decl_tokens(text: str) -> set:
+    """Extract meaningful lowercase tokens from a declaration/description text."""
+    import re
+    tokens = set(re.findall(r"[a-z]+", text.lower()))
+    return tokens - _STOP_WORDS
+
+
+def _camel_split(name: str) -> list:
+    """Split a CamelCase name into lowercase tokens. 'FileEntry' → ['file', 'entry']."""
+    import re
+    return [t.lower() for t in re.findall(r"[A-Z][a-z]*", name) if len(t) > 2]
+
+
+def _find_shared_model_owner(
+    archivos_vistos: list, sec6: dict, sec7: dict, shared_model: dict
+) -> "str | None":
+    """
+    Find which file defines (owns) the shared data model.
+
+    Strategy:
+    1. Find the SEC6 component whose declaration (a) mentions the model AND (b)
+       contains a production verb ("produces", "creates", "generates", "output").
+       This component is the producer/owner.
+    2. Match that component slug to a file.
+    3. Fallback: first phase that produces the model → match to file by full
+       declaration-text overlap between phase and component declarations.
+    4. Final fallback: first file that slug-matches a non-data-struct component.
+    """
+    import re
+
+    # Split CamelCase class name into searchable tokens ("FileEntry" → ["file", "entry"])
+    name_tokens = _camel_split(shared_model["class_name"])
+    if not name_tokens:
+        name_tokens = [t for t in re.findall(r"[a-z]+", shared_model["class_name"].lower()) if len(t) > 3]
+
+    produce_verbs = {"produces", "produce", "creates", "create", "generates", "generate", "output", "outputs"}
+    data_struct_pat = re.compile(r"(_ENTRY|_RECORD|_ITEM|_UNIT|_OBJECT|_ENTITY)$")
+
+    # Step 1: Find the SEC6 component that PRODUCES the shared model
+    # Criterion: declaration mentions the model tokens AND a production verb
+    best_comp_el: "str | None" = None
+    best_score = 0
+    for comp_id, comp_data in sec6.items():
+        comp_el = comp_id.split(".")[-1]
+        if data_struct_pat.search(comp_el):
+            continue
+        decl = comp_data.get("declaration", "").lower()
+        tokens = _decl_tokens(decl)
+        mentions_model = any(tok in decl for tok in name_tokens)
+        mentions_produce = bool(tokens & produce_verbs)
+        if mentions_model and mentions_produce:
+            score = sum(1 for tok in name_tokens if tok in decl)
+            if score > best_score:
+                best_score = score
+                best_comp_el = comp_el
+
+    if best_comp_el:
+        owner = _match_component_slug_to_file(best_comp_el, archivos_vistos)
+        if owner:
+            return owner
+
+    # Step 2: Fallback — find producing phase, then match phase to component by
+    # full declaration-text overlap
+    producing: list = []
+    for phase_id, phase_data in sec7.items():
+        out_text = phase_data.get("output", "").lower()
+        decl_text = phase_data.get("declaration", "").lower()
+        if any(tok in out_text or tok in decl_text for tok in name_tokens):
+            el = phase_id.split(".")[-1]
+            m = re.search(r"(\d+)", el)
+            order = int(m.group(1)) if m else 99
+            producing.append((order, phase_data, el))
+
+    if producing:
+        producing.sort(key=lambda x: x[0])
+        first_phase_data = producing[0][1]
+        phase_tokens = _decl_tokens(
+            first_phase_data.get("declaration", "") + " " +
+            first_phase_data.get("output", "")
+        )
+        # Find SEC6 component with highest declaration-text overlap with this phase
+        best_comp_el = None
+        best_overlap = 0
+        for comp_id, comp_data in sec6.items():
+            comp_el = comp_id.split(".")[-1]
+            if data_struct_pat.search(comp_el):
+                continue
+            comp_tokens = _decl_tokens(comp_data.get("declaration", ""))
+            overlap = len(phase_tokens & comp_tokens)
+            if overlap > best_overlap:
+                best_overlap = overlap
+                best_comp_el = comp_el
+
+        if best_comp_el:
+            owner = _match_component_slug_to_file(best_comp_el, archivos_vistos)
+            if owner:
+                return owner
+
+    # Final fallback: first file that slug-matches any processing component
+    for f in archivos_vistos:
+        base = f["nombre"].split("/")[-1].replace(".py", "").upper()
+        for comp_id in sec6:
+            el = comp_id.split(".")[-1]
+            if data_struct_pat.search(el):
+                continue
+            if el == base or base in el or el in base:
+                return f["nombre"]
+
+    return archivos_vistos[0]["nombre"] if archivos_vistos else None
+
+
+def _match_component_slug_to_file(component_element: str, archivos_vistos: list) -> "str | None":
+    """Match a component name (e.g., SCANNER) to a file path by slug overlap."""
+    import re
+    data_struct_pat = re.compile(r"(_ENTRY|_RECORD|_ITEM|_UNIT|_OBJECT|_ENTITY)$")
+    if data_struct_pat.search(component_element):
+        return None
+    for f in archivos_vistos:
+        base = f["nombre"].split("/")[-1].replace(".py", "").upper()
+        if base == component_element or component_element in base or base in component_element:
+            return f["nombre"]
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Stub builder
+# ---------------------------------------------------------------------------
+
+def _build_stub_symbols(
+    nombre: str,
+    sec6: dict,
+    sec7: dict,
+    shared_model: "dict | None",
+    is_owner: bool,
+    all_ids: set,
+) -> str:
+    """
+    Build a rich stub_symbols string with cross-module awareness.
+
+    Output example:
+    "import: from scanner.scanner import FileEntry; class DuplicateDetector: detect(entries: list[FileEntry]) -> dict"
+    """
+    parts: list = []
+    base = nombre.split("/")[-1].replace(".py", "").upper()
+    is_entry_point = base in ("MAIN", "APP", "CLI", "RUN", "ENTRYPOINT", "__MAIN__")
+
+    # --- 1. Shared model: define (owner) or import (consumer) ---
+    if shared_model:
+        class_name = shared_model["class_name"]
+        owner_file = shared_model.get("owner_file")
+        if is_owner:
+            fields = ", ".join(shared_model["fields"])
+            parts.append(f"@dataclass class {class_name}: {fields}")
+        elif not is_entry_point and owner_file:
+            # Check if this file's phase uses the shared model as input
+            if _file_phase_uses_model(base, sec6, sec7, shared_model):
+                owner_module = owner_file.replace("/", ".").replace(".py", "")
+                parts.append(f"import: from {owner_module} import {class_name}")
+
+    # --- 2. Derive class/function stub from SEC6 + SEC7 ---
+    if is_entry_point:
+        parts.append("funcs: main() \u2014 CLI entry point: parse args, orchestrate pipeline, emit report")
+    else:
+        comp_stub = _derive_stub_from_component_and_phases(base, sec6, sec7, shared_model)
+        if comp_stub:
+            parts.append(comp_stub)
+
+    return "; ".join(parts)
+
+
+def _file_phase_uses_model(
+    base: str, sec6: dict, sec7: dict, shared_model: dict
+) -> bool:
+    """Return True if this file's matching phase has the shared model in its input."""
+    import re
+
+    # Split "FileEntry" → ["file", "entry"] so we can match "file entries" in declarations
+    name_tokens = _camel_split(shared_model["class_name"])
+    if not name_tokens:
+        name_tokens = [t for t in re.findall(r"[a-z]+", shared_model["class_name"].lower()) if len(t) > 3]
+    data_struct_pat = re.compile(r"(_ENTRY|_RECORD|_ITEM|_UNIT|_OBJECT|_ENTITY)$")
+
+    # Find the matching SEC6 component for this file
+    best_comp_id: "str | None" = None
+    best_score = 0
+    for comp_id in sec6:
+        el = comp_id.split(".")[-1]
+        if data_struct_pat.search(el):
+            continue
+        score = 10 if el == base else (len(base) if base in el else (len(el) if el in base else 0))
+        if score > best_score:
+            best_score = score
+            best_comp_id = comp_id
+
+    if not best_comp_id:
+        return False
+
+    # Find the phase that best matches this component using full declaration text
+    comp_decl = sec6[best_comp_id].get("declaration", "")
+    comp_tokens = _decl_tokens(comp_decl + " " + base.replace("_", " "))
+    best_phase: "dict | None" = None
+    best_overlap = 0
+    for phase_id, phase_data in sec7.items():
+        phase_tokens = _decl_tokens(
+            phase_data.get("declaration", "") + " " + phase_data.get("input", "")
+        )
+        overlap = len(comp_tokens & phase_tokens)
+        if overlap > best_overlap:
+            best_overlap = overlap
+            best_phase = phase_data
+
+    if best_phase:
+        inp = best_phase.get("input", "").lower()
+        return any(tok in inp for tok in name_tokens)
+    return False
+
+
+def _derive_stub_from_component_and_phases(
+    base: str, sec6: dict, sec7: dict, shared_model: "dict | None"
+) -> str:
+    """
+    Derive a stub_symbols fragment (class or funcs) from SEC6 component + SEC7 phase.
+
+    base: uppercase base name of the file, e.g. SCANNER, DUPLICATE_DETECTOR
+    Returns: e.g. "class Scanner: scan(directory: str) -> list[FileEntry]"
+    or "" if no suitable component is found.
+
+    Phase matching uses full declaration-text overlap (not element-token overlap)
+    so that vocabulary-mismatched names (SCANNER ↔ DISCOVERY) resolve correctly.
+    """
+    import re
+
+    class_hint = shared_model["class_name"] if shared_model else "Entry"
+    data_struct_pat = re.compile(r"(_ENTRY|_RECORD|_ITEM|_UNIT|_OBJECT|_ENTITY)$")
+
+    # --- Find best matching SEC6 component by slug ---
+    best_comp_id: "str | None" = None
+    best_score = 0
+    for comp_id in sec6:
+        el = comp_id.split(".")[-1]
+        if data_struct_pat.search(el):
+            continue
+        score = 0
+        if el == base:
+            score = 10
+        elif base in el:
+            score = len(base)
+        elif el in base:
+            score = len(el)
+        if score > best_score:
+            best_score = score
+            best_comp_id = comp_id
+
+    if not best_comp_id:
+        # No matching SEC6 component — fall back to phase name matching
+        # e.g. hasher.py → HASHING phase
+        base_tokens = _decl_tokens(base.replace("_", " "))
+        best_phase: "dict | None" = None
+        best_overlap = 0
+        for phase_id, phase_data in sec7.items():
+            ph_el_tokens = _decl_tokens(phase_id.split(".")[-1].replace("_", " "))
+            overlap = len(base_tokens & ph_el_tokens)
+            if overlap > best_overlap:
+                best_overlap = overlap
+                best_phase = phase_data
+        if best_phase and best_overlap > 0:
+            inp = best_phase.get("input", "").lower()
+            out = best_phase.get("output", "").lower()
+            method = _infer_method_name(base)
+            input_sig = _infer_input_sig(inp, class_hint)
+            output_type = _infer_output_type(out, class_hint)
+            return f"funcs: {method}({input_sig}) -> {output_type}"
+        return ""  # Unknown file type — let LLM infer from BETO_CORE
+
+    comp_el = best_comp_id.split(".")[-1]
+    class_name = "".join(w.capitalize() for w in comp_el.split("_"))
+
+    # --- Find matching SEC7 phase using full declaration-text overlap ---
+    # Component declaration + file base → match against all phase text
+    comp_decl = sec6[best_comp_id].get("declaration", "")
+    comp_text_tokens = _decl_tokens(comp_decl + " " + comp_el.replace("_", " "))
+
+    best_phase = None
+    best_overlap = 0
+    for phase_id, phase_data in sec7.items():
+        phase_text = " ".join([
+            phase_data.get("declaration", ""),
+            phase_data.get("input", ""),
+            phase_data.get("output", ""),
+        ])
+        phase_tokens = _decl_tokens(phase_text)
+        overlap = len(comp_text_tokens & phase_tokens)
+        if overlap > best_overlap:
+            best_overlap = overlap
+            best_phase = phase_data
+
+    method = _infer_method_name(comp_el)
+
+    # Derive input/output primarily from the COMPONENT DECLARATION (reliable)
+    # Fall back to phase input/output text only as secondary source
+    comp_decl_lower = comp_decl.lower()
+    phase_inp = best_phase.get("input", "").lower() if best_phase else ""
+    phase_out = best_phase.get("output", "").lower() if best_phase else ""
+
+    input_sig = _infer_input_sig_from_decl(comp_decl_lower, phase_inp, class_hint)
+    output_type = _infer_output_type_from_decl(comp_decl_lower, phase_out, class_hint)
+
+    return f"class {class_name}: {method}({input_sig}) -> {output_type}"
+
+
+def _infer_input_sig_from_decl(comp_decl: str, phase_inp: str, class_hint: str) -> str:
+    """
+    Derive a Python input signature from the component declaration (primary)
+    and phase input text (fallback). Component declaration is more precise
+    because it describes what the component *accepts*.
+    """
+    # Component-level signals (highest priority)
+    if "traverse" in comp_decl or ("directory" in comp_decl and "file entr" not in comp_decl.split("traverses")[0] if "traverses" in comp_decl else "directory" in comp_decl and "file entr" not in comp_decl[:comp_decl.find("directory")]):
+        return "directory: str"
+    if "receives the collection" in comp_decl or ("receives" in comp_decl and "group" in comp_decl):
+        return "groups: dict, total_bytes: int"
+    if "groups" in comp_decl and "file entr" in comp_decl and "duplicate" not in comp_decl[:comp_decl.find("file entr")]:
+        return f"entries: list[{class_hint}]"
+    if "derives the recoverable" in comp_decl or ("space" in comp_decl and "group" in comp_decl):
+        return "groups: dict"
+    # Phase input fallback
+    return _infer_input_sig(phase_inp, class_hint)
+
+
+def _infer_output_type_from_decl(comp_decl: str, phase_out: str, class_hint: str) -> str:
+    """
+    Derive a Python return type from the component declaration (primary)
+    and phase output text (fallback).
+    """
+    if "produces" in comp_decl and "file entr" in comp_decl:
+        return f"list[{class_hint}]"
+    if "final output artifact" in comp_decl or "report" in comp_decl:
+        return "str"
+    if "recoverable space" in comp_decl or ("space" in comp_decl and "group" in comp_decl):
+        return "tuple[dict, int]"
+    if "groups" in comp_decl and "duplicate" in comp_decl:
+        return "dict"
+    # Phase output fallback
+    return _infer_output_type(phase_out, class_hint)
+
+
+def _infer_method_name(comp_el: str) -> str:
+    """Derive a Python method name from a component/file name."""
+    comp_lower = comp_el.lower()
+    if "scan" in comp_lower:
+        return "scan"
+    if "hash" in comp_lower:
+        return "compute_hash"
+    if "detect" in comp_lower or "group" in comp_lower:
+        return "detect"
+    if "calculat" in comp_lower:
+        return "calculate"
+    if "compos" in comp_lower or "report" in comp_lower or "generat" in comp_lower:
+        return "compose"
+    return "process"
+
+
+def _infer_input_sig(inp_text: str, class_hint: str) -> str:
+    """Derive a Python input signature string from a phase input description."""
+    inp = inp_text.lower()
+    if ("dir" in inp or "path" in inp) and "file entr" not in inp:
+        return "directory: str"
+    if "file entr" in inp or class_hint.lower() in inp or ("collection" in inp and "group" not in inp):
+        return f"entries: list[{class_hint}]"
+    if "annotated" in inp:
+        return "groups: dict, total_bytes: int"
+    if "group" in inp:
+        return "groups: dict"
+    return "data"
+
+
+def _infer_output_type(out_text: str, class_hint: str) -> str:
+    """Derive a Python return type annotation from a phase output description."""
+    out = out_text.lower()
+    if "file entr" in out or class_hint.lower() in out:
+        return f"list[{class_hint}]"
+    if "total" in out and "byte" in out:
+        return "tuple[dict, int]"
+    if "report" in out or "artifact" in out:
+        return "str"
+    if "group" in out:
+        return "dict"
+    return "dict"
+
+
+# ---------------------------------------------------------------------------
+# Primary ID selection (avoids circular import with file_generator.py)
+# ---------------------------------------------------------------------------
+
+def _select_primary_ids_dynamic(nombre: str, all_ids: set, max_ids: int = 12) -> list:
+    """
+    Select the most relevant BETO-TRACE IDs for a file from the full registry.
+    Mirrors the logic in file_generator._seleccionar_ids_para_archivo.
+    """
+    import re
+
+    base = re.sub(r"\.\w+$", "", nombre.split("/")[-1])
+    tokens = [t.upper() for t in re.split(r"[_\-]", base) if len(t) > 2]
+
+    scored: list = []
+    for id_ in all_ids:
+        parts = id_.split(".")
+        elemento = parts[-1] if len(parts) >= 4 else ""
+        seccion = parts[1] if len(parts) >= 2 else ""
+        score = 0
+        for tok in tokens:
+            if tok in elemento or tok in seccion:
+                score += 2
+        if "SEC1" in id_:
+            score += 1
+        if "SEC6" in id_ or "SEC7" in id_:
+            score += 1
+        scored.append((score, id_))
+
+    scored.sort(key=lambda x: (-x[0], x[1]))
+    selected = [id_ for _, id_ in scored[:max_ids]]
+    if not any("SEC1" in id_ for id_ in selected):
+        intent_ids = [id_ for _, id_ in scored if "SEC1" in id_]
+        if intent_ids:
+            selected = intent_ids[:2] + selected[:max_ids - 2]
+    return sorted(selected)
+
+
+def _extract_files_from_manifest(content: str) -> list[dict]:
+    """
+    Extract Python/config file paths declared in MANIFEST_PROYECTO.md.
+    Supports table rows with backtick-quoted file names.
+    """
+    import re
+
+    archivos_vistos: list = []
+    seen: set = set()
+    for line in content.split("\n"):
+        if "|" not in line and "`" not in line:
+            continue
+        if re.match(r"\s*\|[-\s|]+\|\s*$", line):
+            continue
+        for m in re.finditer(r"`([^`]+\.(py|yaml|yml|toml|json|html|css|js|md|txt|cfg|ini))`", line):
+            nombre = m.group(1)
+            if re.match(r"(BETO_|TRACE_|MANIFEST_|PHASE_|PASO_|CIERRE)", nombre):
+                continue
+            if nombre.lower() in ("archivo", "file", "archivos", "files"):
+                continue
+            if nombre not in seen:
+                seen.add(nombre)
+                cols = [c.strip() for c in line.split("|") if c.strip()]
+                nodo = ""
+                for col in cols:
+                    if re.search(r"P-\d+|N-\d+", col):
+                        nodo = re.search(r"P-\d+[\.\d]*|N-\d+", col).group(0)
+                        break
+                archivos_vistos.append({"nombre": nombre, "nodo": nodo, "desc": ""})
+    return archivos_vistos
 
 
 def _derivar_desde_seccion8(content: str) -> list[dict]:
