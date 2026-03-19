@@ -12,6 +12,7 @@ cycles_test/
 test_cycles/
 test_output/
 debug/
+*.db
 *.json
 !examples/**/*.json
 .claude/
