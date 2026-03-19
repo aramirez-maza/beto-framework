@@ -2,7 +2,7 @@
 
 > **BETO formalizes the ignorance of an AI.**
 
-BETO is an epistemic governance protocol for LLM-assisted software specification and materialization. It enforces a formal boundary between what the operator has declared and what the model has assumed — preventing the silent completion problem that makes AI-generated software unauditable.
+BETO is an epistemic governance protocol that materializes raw semantic intent into fully traceable, auditable software. It enforces a formal boundary between what the operator has declared and what the model has assumed — preventing the silent completion problem that makes AI-generated software unauditable.
 
 **Version:** 4.5.0 (March 2026) · **Author:** Alberto Ramírez · **License:** MIT
 
