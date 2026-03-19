@@ -1,8 +1,25 @@
 # BETO Persistence Migration Plan — JSON → SQLite
 
-**Status:** APPROVED
+**Status:** COMPLETED
 **Target version:** v4.5
-**Date:** 2026-03-18
+**Completed:** 2026-03-18
+
+---
+
+## Resultado final
+
+Las cuatro fases fueron implementadas y validadas en su totalidad. El Executor opera en modo SQLite-only a partir de v4.5.0.
+
+| Suite de tests | Checks |
+|---|---|
+| Phase 1 — dual-write + parity | 38/38 |
+| Phase 2 — state_reader + build_state_payload | 9/9 |
+| Phase 2 fallback — render policy | 5/5 |
+| Edge cases | 35/35 |
+| Phase 4 — SQLite-only mode + backfill | 51/51 |
+| **Total** | **138/138** |
+
+El documento que sigue es el registro histórico de las decisiones de diseño tomadas antes de la implementación. Se preserva como referencia.
 
 ---
 

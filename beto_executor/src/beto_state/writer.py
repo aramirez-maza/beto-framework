@@ -7,16 +7,18 @@ Estrategia por paso:
   Paso 4:   agrega nodos (desde BETO_SYSTEM_GRAPH)
   Paso 5:   enriquece nodos con intent de sus BETO_COREs hijos
   Paso 6:   agrega OQs cerradas (desde CIERRE_ASISTIDO)
-  Paso 7+:  actualiza gaps y decisiones de gate desde state JSON
+  Paso 7+:  carga gates desde SQLite
 
-Siempre lee el BETO_STATE.json existente y lo actualiza incrementalmente.
-Nunca borra información previamente extraída — solo agrega o actualiza.
+Phase 4 (v4.5): SQLite-only mode.
+  - Estado inicial cargado desde SQLite (no desde BETO_STATE.json).
+  - Si beto.db no existe, se crea automáticamente con init_db().
+  - BETO_STATE.json se renderiza siempre desde SQLite.
+  - Sin fallback — cualquier fallo en el render propaga la excepción.
 """
 
 from __future__ import annotations
-import os
+import json as _json
 import sys
-import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -25,19 +27,10 @@ from .extractor import (
     extract_from_beto_core_draft,
     extract_from_beto_system_graph,
     extract_from_cierre_asistido,
-    extract_from_state_json,
     extract_node_intent,
 )
 
 BETO_STATE_FILENAME = "BETO_STATE.json"
-
-# ── Phase 2 strict mode ─────────────────────────────────────────────────────
-# strict=False (default): if beto.db is present and Phase 2 render fails,
-#   fall back to the legacy format and emit a strong warning.
-# strict=True: if beto.db is present and Phase 2 render fails, raise
-#   immediately so the failure is never silently hidden.
-# Toggle via env var at process start: BETO_STRICT_PHASE2=1
-STRICT_PHASE2_DB_RENDER: bool = os.environ.get("BETO_STRICT_PHASE2", "0") == "1"
 
 
 class BETOStateWriter:
@@ -45,28 +38,23 @@ class BETOStateWriter:
     Actualiza BETO_STATE.json en el cycle_dir después de cada paso.
     Thread-safe no requerido — BETO_EXECUTOR es single-process.
 
-    Phase 2 (v4.5): when a .beto/beto.db exists under cycle_dir, the writer
-    also pushes extracted state to SQLite and renders BETO_STATE.json from
-    SQLite as the canonical source.
-
-    Fallback policy (see STRICT_PHASE2_DB_RENDER):
-      - No DB found:        → legacy format, metadata.fallback_reason=DB_NOT_FOUND
-      - DB present, OK:     → Phase 2 format, metadata.rendered_from=sqlite
-      - DB present, fails, strict=False → legacy + strong warning, fallback_reason=PHASE2_RENDER_FAILED
-      - DB present, fails, strict=True  → RuntimeError raised, no fallback
+    Phase 4 (v4.5): SQLite-only mode.
+      - Estado inicial leído desde SQLite (ciclo, OQs, gates).
+      - Si beto.db no existe: auto-creado con init_db().
+      - Siempre raises en fallo de render — sin fallback.
+      - Nodos y campos OSC se re-extraen de markdown en cada paso.
     """
 
     def __init__(self, cycle_dir: Path, ciclo_id: str):
         self.cycle_dir = cycle_dir
         self.ciclo_id = ciclo_id
         self.state_path = cycle_dir / BETO_STATE_FILENAME
-        # Phase 2 — .beto lives at cycle_dir/.beto (same convention as motor.py)
         self._beto_dir = cycle_dir / ".beto"
 
     def update(self, paso: int) -> BETOState:
         """
-        Lee el estado actual, aplica las extracciones correspondientes al paso,
-        escribe BETO_STATE.json actualizado. Retorna el BETOState resultante.
+        Carga el estado desde SQLite, aplica las extracciones del paso,
+        escribe BETO_STATE.json renderizado desde SQLite. Retorna el BETOState.
         """
         state = self._load_or_create(paso)
         state.paso_actual = paso
@@ -90,73 +78,40 @@ class BETOStateWriter:
         # — Paso 6+: OQs cerradas desde CIERRE_ASISTIDO / CIERRE_ASISTIDO_OPERATIVO —
         if paso >= 6:
             self._update_from_cierre_asistido(state, warnings)
-            # OSC update — BETO v4.3
             self._update_osc_from_executional_gap_registry(state, warnings)
 
-        # — Siempre: gaps y gates desde state JSON —
-        self._update_from_state_json(state, warnings)
+        # — Siempre: gates desde SQLite —
+        self._load_gates_from_db(state)
 
         # Deduplicar warnings
         state.extraction_warnings = list(dict.fromkeys(warnings))
 
-        self._save(state)
-
-        # Phase 2: push to DB + re-render, or annotate legacy with fallback reason.
-        # Policy is enforced inside _attempt_phase2_render.
-        self._attempt_phase2_render(state, paso)
+        # Phase 4: push to DB + render from SQLite (auto-creates DB, raises on failure)
+        self._attempt_phase4_render(state, paso)
 
         return state
 
-    # ------------------------------------------------------------------
+    # ── Phase 4 core ───────────────────────────────────────────────────────────
 
-    def _load_or_create(self, paso: int) -> BETOState:
-        if self.state_path.exists():
-            try:
-                import json, dataclasses
-                raw = json.loads(self.state_path.read_text(encoding="utf-8"))
-                # Reconstruir dataclasses desde dict
-                nodos = [NodoBETO(**n) for n in raw.get("nodos", [])]
-                oqs_a = [OQ(**o) for o in raw.get("oqs_abiertas", [])]
-                oqs_c = [OQ(**o) for o in raw.get("oqs_cerradas", [])]
-                return BETOState(
-                    ciclo_id=raw.get("ciclo_id", self.ciclo_id),
-                    paso_actual=raw.get("paso_actual", paso),
-                    system_name=raw.get("system_name", ""),
-                    system_intent=raw.get("system_intent", ""),
-                    system_boundaries_in=raw.get("system_boundaries_in", []),
-                    system_boundaries_out=raw.get("system_boundaries_out", []),
-                    stable_decisions=raw.get("stable_decisions", []),
-                    nodos=nodos,
-                    oqs_abiertas=oqs_a,
-                    oqs_cerradas=oqs_c,
-                    gaps_activos=raw.get("gaps_activos", []),
-                    decisiones_gate=raw.get("decisiones_gate", []),
-                    # OSC fields — BETO v4.3 (backward-compatible defaults)
-                    executional_gap_count=raw.get("executional_gap_count", 0),
-                    requestion_history=raw.get("requestion_history", []),
-                    operational_residue=raw.get("operational_residue", []),
-                    accepted_limits=raw.get("accepted_limits", []),
-                    g2b_result=raw.get("g2b_result", ""),
-                    extraction_warnings=raw.get("extraction_warnings", []),
-                    generado_en_paso=raw.get("generado_en_paso", 0),
-                    timestamp=raw.get("timestamp", ""),
-                )
-            except Exception:
-                pass  # Si falla la carga, crear desde cero
-        return BETOState(ciclo_id=self.ciclo_id, paso_actual=paso)
+    def _attempt_phase4_render(self, state: BETOState, paso: int) -> None:
+        """
+        SQLite-only render:
+          1. Auto-create beto.db if absent.
+          2. Push extracted state to SQLite (non-fatal push warning on failure).
+          3. Render BETO_STATE.json from SQLite — raises on any failure.
+        """
+        if not (self._beto_dir / "beto.db").exists():
+            from persistence.schema import init_db
+            init_db(self._beto_dir)
 
-    def _save(self, state: BETOState) -> None:
-        self.state_path.write_text(state.to_json(), encoding="utf-8")
-
-    # ── Phase 2 helpers ────────────────────────────────────────────────────
+        self._push_to_db(state, paso)
+        self._do_phase4_render(state)  # raises on failure — no try/except
 
     def _push_to_db(self, state: BETOState, paso: int) -> None:
         """
-        Push system-info and OQ state to SQLite so state_reader can render a
-        canonical payload.  Non-fatal — a push failure means the render may
-        use stale data, but the render step itself decides the final policy.
+        Push system-info and OQ state to SQLite.
+        Non-fatal — logs to stderr on failure; render step may use prior DB data.
         """
-        import json as _json
         try:
             from persistence.writers.cycle_writer import CycleWriter
             from persistence.writers.oq_writer import OQWriter
@@ -190,117 +145,102 @@ class BETOStateWriter:
                 file=sys.stderr,
             )
 
-    def _attempt_phase2_render(self, state: BETOState, paso: int) -> None:
+    def _do_phase4_render(self, state: BETOState) -> None:
         """
-        Central Phase 2 render policy:
+        Render BETO_STATE.json from SQLite, supplemented with markdown-extracted
+        fields not yet tracked in SQLite (nodos, OSC fields, extraction_warnings).
 
-          1. No DB  → annotate legacy with fallback_reason=DB_NOT_FOUND (compat, not error)
-          2. DB OK  → push to DB, render Phase 2, annotate metadata.rendered_from=sqlite
-          3. DB fail, strict=False → push to DB, fallback legacy + strong warning
-          4. DB fail, strict=True  → push to DB, raise RuntimeError (no fallback)
+        Raises on any failure — caller owns no fallback.
         """
-        db_path = self._beto_dir / "beto.db"
-
-        if not db_path.exists():
-            print(
-                f"[BETO_STATE] DB_NOT_FOUND — using legacy format "
-                f"(cycle={self.ciclo_id}, expected_db={db_path})",
-                file=sys.stderr,
-            )
-            self._annotate_metadata({
-                "rendered_from": "legacy",
-                "fallback_reason": "DB_NOT_FOUND",
-            })
-            return
-
-        # DB is present — push extracted state, then render
-        self._push_to_db(state, paso)
-        try:
-            self._do_phase2_render()
-        except Exception as exc:
-            self._handle_render_failure(exc, db_path)
-
-    def _do_phase2_render(self) -> None:
-        """
-        Render BETO_STATE.json from SQLite.  Raises on any failure — the
-        caller (_attempt_phase2_render) owns the fallback policy.
-
-        Output is a superset of the legacy format:
-          - Phase 2 canonical keys (cycle_id, project_id, route_mode, …)
-          - Legacy aliases (ciclo_id, paso_actual, oqs_abiertas, oqs_cerradas)
-            so that context_builder.py and _load_or_create() need no changes.
-        """
-        import json as _json
         from persistence.readers.state_reader import build_state_payload
+        from dataclasses import asdict
 
         payload = build_state_payload(self._beto_dir, self.ciclo_id)
 
-        # Merge: legacy fields on disk first (preserves nodos, routing summary,
-        # etc. not yet tracked in SQLite); Phase 2 keys win on conflict.
-        try:
-            legacy = _json.loads(self.state_path.read_text(encoding="utf-8"))
-        except Exception:
-            legacy = {}
+        # Supplement SQLite payload with fields extracted from markdown
+        payload["nodos"] = [asdict(n) for n in state.nodos]
+        payload["executional_gap_count"] = state.executional_gap_count
+        payload["requestion_history"] = state.requestion_history
+        payload["operational_residue"] = state.operational_residue
+        payload["accepted_limits"] = state.accepted_limits
+        payload["g2b_result"] = state.g2b_result
+        payload["extraction_warnings"] = state.extraction_warnings
 
-        merged = {**legacy, **payload}
         self.state_path.write_text(
-            _json.dumps(merged, indent=2, ensure_ascii=False),
+            _json.dumps(payload, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
 
-    def _handle_render_failure(self, exc: Exception, db_path: Path) -> None:
-        """
-        Log a structured entry for a Phase 2 render failure, then enforce
-        STRICT_PHASE2_DB_RENDER policy:
-          strict=False → annotate legacy file with PHASE2_RENDER_FAILED, continue
-          strict=True  → raise RuntimeError, no fallback
-        """
-        tb_summary = "".join(
-            traceback.format_exception(type(exc), exc, exc.__traceback__, limit=5)
-        ).strip()
+    # ── State loading ──────────────────────────────────────────────────────────
 
-        print(
-            f"[BETO_STATE] reason_code=PHASE2_RENDER_FAILED "
-            f"db_path={db_path} "
-            f"cycle_id={self.ciclo_id} "
-            f"strict={STRICT_PHASE2_DB_RENDER} "
-            f"exc_type={type(exc).__name__} "
-            f"exc_message={exc}\n"
-            f"{tb_summary}",
-            file=sys.stderr,
-        )
+    def _load_or_create(self, paso: int) -> BETOState:
+        """Load cycle state from SQLite. Returns empty BETOState if DB or cycle absent."""
+        db_path = self._beto_dir / "beto.db"
+        if not db_path.exists():
+            return BETOState(ciclo_id=self.ciclo_id, paso_actual=paso)
 
-        if STRICT_PHASE2_DB_RENDER:
-            raise RuntimeError(
-                f"Phase 2 render failed for cycle '{self.ciclo_id}' "
-                f"(reason_code=PHASE2_RENDER_FAILED, strict=True): {exc}"
-            ) from exc
-
-        # Non-strict: fall back to legacy with explicit annotation
-        self._annotate_metadata({
-            "rendered_from": "legacy",
-            "fallback_reason": "PHASE2_RENDER_FAILED",
-            "reason_detail": f"{type(exc).__name__}: {exc}",
-        })
-
-    def _annotate_metadata(self, metadata: dict) -> None:
-        """
-        Patch a top-level 'metadata' key into the current BETO_STATE.json.
-        Used to record rendered_from and fallback_reason on the legacy format.
-        No-op if the file cannot be read/written.
-        """
-        import json as _json
         try:
-            doc = _json.loads(self.state_path.read_text(encoding="utf-8"))
-        except Exception:
-            doc = {}
-        doc["metadata"] = metadata
-        self.state_path.write_text(
-            _json.dumps(doc, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
+            from persistence.queries import get_cycle, get_open_oqs, get_closed_oqs
 
-    # ── File I/O ───────────────────────────────────────────────────────────
+            cycle = get_cycle(self._beto_dir, self.ciclo_id)
+            if cycle is None:
+                return BETOState(ciclo_id=self.ciclo_id, paso_actual=paso)
+
+            try:
+                boundaries = _json.loads(cycle.get("system_boundaries") or "{}")
+            except Exception:
+                boundaries = {}
+            try:
+                stable_decisions = _json.loads(cycle.get("stable_decisions") or "[]")
+            except Exception:
+                stable_decisions = []
+
+            open_oq_rows = get_open_oqs(self._beto_dir, self.ciclo_id)
+            closed_oq_rows = get_closed_oqs(self._beto_dir, self.ciclo_id)
+
+            return BETOState(
+                ciclo_id=self.ciclo_id,
+                paso_actual=cycle.get("paso_actual", paso),
+                system_name=cycle.get("system_name") or "",
+                system_intent=cycle.get("system_intent") or "",
+                system_boundaries_in=boundaries.get("in", []),
+                system_boundaries_out=boundaries.get("out", []),
+                stable_decisions=stable_decisions,
+                nodos=[],          # Re-extracted from markdown
+                oqs_abiertas=[_row_to_oq(r) for r in open_oq_rows],
+                oqs_cerradas=[_row_to_oq(r) for r in closed_oq_rows],
+                gaps_activos=[],   # No GapWriter — acceptable for Phase 4
+                decisiones_gate=[], # Loaded via _load_gates_from_db
+            )
+        except Exception:
+            return BETOState(ciclo_id=self.ciclo_id, paso_actual=paso)
+
+    def _load_gates_from_db(self, state: BETOState) -> None:
+        """
+        Load gate decisions from SQLite into state.decisiones_gate.
+        Replaces _update_from_state_json (which read from Gestor de Ciclo JSON).
+        Non-fatal — on failure, decisiones_gate stays as loaded from _load_or_create.
+        """
+        db_path = self._beto_dir / "beto.db"
+        if not db_path.exists():
+            return
+        try:
+            from persistence.queries import get_gate_decisions
+            rows = get_gate_decisions(self._beto_dir, self.ciclo_id)
+            state.decisiones_gate = [
+                {
+                    "gate_id": r["gate"],
+                    "decision": r["decision"],
+                    "paso": r["paso"],
+                    "operator_notes": r.get("operator_notes"),
+                    "decided_at": r.get("decided_at"),
+                }
+                for r in rows
+            ]
+        except Exception:
+            pass
+
+    # ── File I/O ───────────────────────────────────────────────────────────────
 
     def _read_artifact(self, nombre: str) -> str | None:
         ruta = self.cycle_dir / nombre
@@ -308,7 +248,7 @@ class BETOStateWriter:
             return ruta.read_text(encoding="utf-8")
         return None
 
-    # ------------------------------------------------------------------
+    # ── Extraction helpers ─────────────────────────────────────────────────────
 
     def _update_from_beto_core_draft(self, state: BETOState, warnings: list[str]) -> None:
         content = self._read_artifact("BETO_CORE_DRAFT.md")
@@ -318,7 +258,6 @@ class BETOStateWriter:
 
         data = extract_from_beto_core_draft(content, warnings)
 
-        # Solo actualizar si hay datos — nunca sobreescribir con vacío
         if data["system_name"] and not state.system_name:
             state.system_name = data["system_name"]
         if data["system_intent"]:
@@ -330,7 +269,6 @@ class BETOStateWriter:
         if data["stable_decisions"]:
             state.stable_decisions = data["stable_decisions"]
 
-        # OQs: merge sin duplicar por ID
         existing_oq_ids = {oq.id for oq in state.oqs_abiertas} | {oq.id for oq in state.oqs_cerradas}
         for oq in data["oqs_abiertas"]:
             if oq.id not in existing_oq_ids:
@@ -340,7 +278,6 @@ class BETOStateWriter:
             if oq.id not in existing_oq_ids:
                 state.oqs_cerradas.append(oq)
                 existing_oq_ids.add(oq.id)
-            # Si estaba abierta, moverla a cerradas
             elif oq.id in {o.id for o in state.oqs_abiertas}:
                 state.oqs_abiertas = [o for o in state.oqs_abiertas if o.id != oq.id]
                 state.oqs_cerradas.append(oq)
@@ -353,15 +290,10 @@ class BETOStateWriter:
 
         data = extract_from_beto_system_graph(content, warnings)
 
-        if data["system_name"] and not state.system_name:
-            state.system_name = data["system_name"]
-        elif data["system_name"]:
-            # El grafo tiene el nombre canónico — tiene precedencia
+        if data["system_name"]:
             state.system_name = data["system_name"]
 
         if data["nodos"]:
-            # Reemplazar lista de nodos con la del grafo (fuente de verdad)
-            # Preservar intents ya extraídos
             existing_intents = {n.id: n.intent for n in state.nodos if n.intent}
             state.nodos = data["nodos"]
             for n in state.nodos:
@@ -369,7 +301,6 @@ class BETOStateWriter:
                     n.intent = existing_intents[n.id]
 
     def _enrich_node_intents(self, state: BETOState, warnings: list[str]) -> None:
-        """Lee cada BETO_CORE hijo disponible y extrae su intent."""
         for nodo in state.nodos:
             if nodo.intent or not nodo.beto_core:
                 continue
@@ -382,8 +313,6 @@ class BETOStateWriter:
                     warnings.append(f"Nodo {nodo.id}: no se extrajo intent de {nodo.beto_core}")
 
     def _update_from_cierre_asistido(self, state: BETOState, warnings: list[str]) -> None:
-        # BETO v4.3: buscar primero CIERRE_ASISTIDO_OPERATIVO.md (nuevo),
-        # si no existe fallback a CIERRE_ASISTIDO.md (compatibilidad v4.2)
         content = self._read_artifact("CIERRE_ASISTIDO_OPERATIVO.md")
         if not content:
             content = self._read_artifact("CIERRE_ASISTIDO.md")
@@ -401,7 +330,6 @@ class BETOStateWriter:
 
         for oq in oqs_cierre:
             if oq.id in existing_cerradas:
-                # Enriquecer con modo y resolución si están vacíos
                 existing = existing_cerradas[oq.id]
                 if not existing.modo_cierre:
                     existing.modo_cierre = oq.modo_cierre
@@ -409,24 +337,16 @@ class BETOStateWriter:
                     existing.resolucion = oq.resolucion
             else:
                 state.oqs_cerradas.append(oq)
-                # Remover de abiertas si estaba allí
                 if oq.id in abiertas_ids:
                     state.oqs_abiertas = [o for o in state.oqs_abiertas if o.id != oq.id]
 
     def _update_osc_from_executional_gap_registry(
         self, state: BETOState, warnings: list[str]
     ) -> None:
-        """
-        Lee EXECUTIONAL_GAP_REGISTRY.md y EXECUTION_INTENT_MAP.md si existen,
-        actualiza los campos OSC del BETOState (BETO v4.3).
-        Operación additive — nunca borra datos existentes.
-        """
         import re
 
-        # Actualizar execution_state de las OQs desde los artefactos OSC disponibles
         intent_map = self._read_artifact("EXECUTION_INTENT_MAP.md")
         if intent_map:
-            # Extraer resultado del gate G-2B
             g2b_match = re.search(
                 r"\*\*Resultado:\*\*\s*(APPROVED_EXECUTABLE|APPROVED_WITH_LIMITS|BLOCKED_BY_EXECUTIONAL_GAPS)",
                 intent_map,
@@ -434,26 +354,20 @@ class BETOStateWriter:
             if g2b_match and not state.g2b_result:
                 state.g2b_result = g2b_match.group(1)
 
-        # Actualizar desde EXECUTIONAL_GAP_REGISTRY
         gap_registry = self._read_artifact("EXECUTIONAL_GAP_REGISTRY.md")
         if gap_registry:
-            # Contar gaps activos (DECLARED_RAW que siguen bloqueando)
             active_gaps = re.findall(r"DECLARED_RAW", gap_registry)
             count = len(active_gaps)
             if count > 0 or state.executional_gap_count == 0:
                 state.executional_gap_count = count
 
-        # Actualizar execution_state en OQs desde CIERRE_ASISTIDO_OPERATIVO
         cierre_op = self._read_artifact("CIERRE_ASISTIDO_OPERATIVO.md")
         if not cierre_op:
-            # Fallback: también puede llamarse CIERRE_ASISTIDO.md en repos anteriores
             cierre_op = self._read_artifact("CIERRE_ASISTIDO.md")
 
         if cierre_op:
-            # Detectar OQs promovidas a EXECUTABLE
             for oq in state.oqs_cerradas:
                 oq_id = oq.id
-                # Buscar estado en el cierre
                 exec_match = re.search(
                     rf"{re.escape(oq_id)}.*?execution_state:\s*(DECLARED_EXECUTABLE|DECLARED_WITH_LIMITS|DECLARED_RAW)",
                     cierre_op,
@@ -462,15 +376,10 @@ class BETOStateWriter:
                 if exec_match:
                     oq.execution_state = exec_match.group(1)
 
-            # Contar límites aceptados
-            with_limits_count = len(
-                re.findall(r"DECLARED_WITH_LIMITS", cierre_op)
-            )
+            with_limits_count = len(re.findall(r"DECLARED_WITH_LIMITS", cierre_op))
             if with_limits_count > len(state.accepted_limits):
-                # Registrar en accepted_limits como resumen
                 import_ts = ""
                 try:
-                    from datetime import datetime, timezone
                     import_ts = datetime.now(timezone.utc).isoformat()
                 except Exception:
                     pass
@@ -483,18 +392,19 @@ class BETOStateWriter:
                         }
                     ]
 
-    def _update_from_state_json(self, state: BETOState, warnings: list[str]) -> None:
-        """Lee el JSON del Gestor de Ciclo para gates y gaps."""
-        json_path = self.cycle_dir.parent / f"{self.ciclo_id}.json"
-        if not json_path.exists():
-            # Fallback: buscar en cycle_dir
-            candidates = list(self.cycle_dir.parent.glob(f"{self.ciclo_id}*.json"))
-            if not candidates:
-                return
-            json_path = candidates[0]
 
-        content = json_path.read_text(encoding="utf-8")
-        data = extract_from_state_json(content, warnings)
+# ─── Helpers ──────────────────────────────────────────────────────────────────
 
-        state.decisiones_gate = data["decisiones_gate"]
-        state.gaps_activos = data["gaps_activos"]
+def _row_to_oq(r: dict) -> OQ:
+    """Convert a DB open_questions row to an OQ dataclass."""
+    return OQ(
+        id=r.get("oq_id", ""),
+        texto=r.get("texto", ""),
+        modo_cierre=r.get("modo_cierre") or "",
+        resolucion=r.get("resolucion") or "",
+        oq_type=r.get("oq_type", "NOT_CLASSIFIED"),
+        critical=bool(r.get("critical", 0)),
+        execution_state=r.get("execution_state", "PENDING"),
+        execution_readiness_check=r.get("readiness_check", "NOT_EVALUATED"),
+        requestion_count=r.get("requestion_count", 0),
+    )

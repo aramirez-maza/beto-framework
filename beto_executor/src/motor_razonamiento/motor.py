@@ -140,13 +140,6 @@ class MotorRazonamiento:
             except Exception as e:
                 print(f"[BETO_STATE] Warning: update falló en paso {paso} — {e} (no bloquea)")
 
-            # v4.5 dual-write — sync OQs from BETO_STATE to DB
-            if self._oq_writer is not None:
-                try:
-                    beto_state_path = self.cycle_dir / "BETO_STATE.json"
-                    self._oq_writer.sync_from_beto_state(beto_state_path, paso)
-                except Exception as e:
-                    print(f"[PERSISTENCE] Warning: OQ sync failed at paso {paso} — {e}")
 
             # v4.4 — Snapshot generation (REGLA SNAPSHOT_INVALIDATION)
             # BETO-TRACE: BETO_V44.SEC7.PHASE.PHASE_2_CONTEXT_SNAPSHOT
@@ -167,6 +160,24 @@ class MotorRazonamiento:
                 }
 
                 resultado = self.gates.procesar_gate(self.ciclo_id, señal)
+
+                # Phase 4: persist gate decision to SQLite
+                if self.execution_router is not None:
+                    try:
+                        from persistence.writers.gate_writer import GateWriter
+                        _decision_map = {"aprobado": "APPROVED", "rechazado": "REJECTED"}
+                        _raw = resultado.get("decision", "UNKNOWN")
+                        _gate_decision = _decision_map.get(_raw.lower(), _raw.upper())
+                        beto_dir = self.cycle_dir / ".beto"
+                        GateWriter.write(
+                            beto_dir=beto_dir,
+                            cycle_id=self.ciclo_id,
+                            gate=gate_id,
+                            decision=_gate_decision,
+                            paso=paso,
+                        )
+                    except Exception as e:
+                        print(f"[PERSISTENCE] Warning: gate DB write failed for {gate_id} — {e}")
 
                 if resultado["señal_tipo"] == "RETROCESO":
                     # BETO-TRACE: BETO_MOTOR_RAZ.SEC6.MODEL.RETROCESO_HANDLER
@@ -317,21 +328,18 @@ class MotorRazonamiento:
                     "timestamp": now,
                 },
             )
-            # v4.5 dual-write
+            # v4.5 dual-write — OQ count from SQLite (Phase 4: no BETO_STATE.json read)
             if self._snapshot_db_writer is not None:
                 try:
-                    import json as _json
-                    beto_state_path = self.cycle_dir / "BETO_STATE.json"
-                    oqs_abiertas = []
-                    if beto_state_path.exists():
-                        state = _json.loads(beto_state_path.read_text(encoding="utf-8"))
-                        oqs_abiertas = state.get("oqs_abiertas", [])
+                    from persistence.queries import get_open_oqs
+                    beto_dir = self.cycle_dir / ".beto"
+                    oq_count = len(get_open_oqs(beto_dir, self.ciclo_id))
                     self._snapshot_db_writer.write(
                         snapshot_id=aq_id,
                         snapshot_type="ACTIVE_OQ_SET",
                         paso=paso,
                         route_type=self.route_type,
-                        payload={"oqs_abiertas_count": len(oqs_abiertas)},
+                        payload={"oqs_abiertas_count": oq_count},
                     )
                 except Exception as e:
                     print(f"[PERSISTENCE] Warning: AQ snapshot DB write failed — {e}")

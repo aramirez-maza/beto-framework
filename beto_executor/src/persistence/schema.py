@@ -54,7 +54,7 @@ _TABLES = [
     )
     """,
 
-    # Routing decisions (dual-write alongside .beto/routing/decisions/*.json)
+    # Routing decisions (sole backend — Phase 3+)
     """
     CREATE TABLE IF NOT EXISTS routing_decisions (
         decision_id          TEXT PRIMARY KEY,
@@ -72,7 +72,7 @@ _TABLES = [
     )
     """,
 
-    # Route promotions (dual-write alongside .beto/routing/promotions/*.json)
+    # Route promotions (sole backend — Phase 3+)
     """
     CREATE TABLE IF NOT EXISTS route_promotions (
         promotion_id              TEXT PRIMARY KEY,
@@ -89,7 +89,7 @@ _TABLES = [
     )
     """,
 
-    # Snapshots (dual-write alongside .beto/snapshots/*.json)
+    # Snapshots (sole backend — Phase 3+)
     """
     CREATE TABLE IF NOT EXISTS snapshots (
         snapshot_id    TEXT PRIMARY KEY,

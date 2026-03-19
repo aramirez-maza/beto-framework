@@ -75,13 +75,16 @@ def _route_relevance(name: str) -> str:
 
 # ─── Writer ───────────────────────────────────────────────────────────────────
 
-class ProjectIndexWriter:
+class ProjectIndexExporter:
     """
     BETO-TRACE: BETO_V44.SEC7.PHASE.PHASE_3_OPERATIONAL_ARTIFACTS
     BETO-TRACE: BETO_V44.SEC8.DECISION.ROUTING_CONFIG
+    BETO-TRACE: BETO_V45.SEC7.PHASE.PHASE_4_CLEANUP
 
-    Generates .beto/project_index.json from cycle artifacts.
-    Indexes: cycle markdown docs, routing decisions, snapshots.
+    Exports .beto/project_index.json on demand from SQLite + cycle artifacts.
+    Indexes: cycle markdown docs, routing decisions, snapshots (all from DB).
+
+    Phase 4: renamed from ProjectIndexWriter to ProjectIndexExporter.
     """
 
     def __init__(self, beto_dir: Path, ciclo_id: str) -> None:
@@ -89,7 +92,7 @@ class ProjectIndexWriter:
         self.beto_dir = beto_dir
         self.ciclo_id = ciclo_id
 
-    def write(
+    def export(
         self,
         cycle_dir: Path,
         updated_by: str = "materialization_executor",
@@ -249,3 +252,10 @@ class ProjectIndexWriter:
         path = self.beto_dir / "project_index.json"
         path.write_text(json.dumps(index, ensure_ascii=False, indent=2), encoding="utf-8")
         return path
+
+    # Backward-compat alias — callers using write() continue to work unchanged
+    write = export
+
+
+# Backward-compat alias — import sites using ProjectIndexWriter continue to work
+ProjectIndexWriter = ProjectIndexExporter

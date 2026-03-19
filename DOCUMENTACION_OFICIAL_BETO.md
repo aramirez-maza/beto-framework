@@ -1584,4 +1584,167 @@ BETO v4.4 es completamente aditivo. El núcleo v4.2, la capa OSC v4.3 y todos lo
 
 ---
 
-*Framework BETO v4.4 — Alberto Ramírez — 2026*
+## 16. BETO v4.5 — Capa de Persistencia SQLite
+
+### 16.1 Propósito
+
+BETO v4.5 cierra la migración de persistencia que v4.4 dejó pendiente. El Executor opera ahora con SQLite como única fuente de verdad para todo el estado de ciclo en runtime. Los archivos JSON que funcionaban como base de datos implícita han sido convertidos en proyecciones derivadas: se generan cuando hace falta, no se leen durante la ejecución.
+
+El protocolo BETO, los 11 pasos, los gates, los estados epistémicos y todos los artefactos formales no cambian. v4.5 es una migración de la capa de almacenamiento interno del Executor — no del protocolo.
+
+---
+
+### 16.2 El problema que resuelve
+
+La persistencia basada en archivos JSON presentaba tres limitaciones estructurales:
+
+**Sin garantías transaccionales.** Un fallo a mitad de un paso podía dejar `BETO_STATE.json`, los registros de routing y los snapshots en estados mutuamente inconsistentes. La detección requería `parity_check.py`, que actúa después del daño.
+
+**Sin capa de consulta.** Acceder al historial de OQs, decisions de gate o routing entre ciclos requería parsear archivos. No había forma eficiente de consultar qué OQs críticas seguían abiertas o cuántas decisiones de gate había tomado el operador en un ciclo.
+
+**Reconstrucción de estado frágil.** `BETOStateWriter` leía `BETO_STATE.json` al inicio de cada paso para no perder trabajo previo. Si el archivo estaba corrupto o ausente, el estado se perdía. El conteo de snapshots se reseteaba entre reinicios de proceso.
+
+---
+
+### 16.3 Capa de persistencia transversal (`persistence/`)
+
+La capa vive en `beto_executor/src/persistence/` — separada del `execution_router/` porque almacena más que routing: ciclos, snapshots, OQs, gates, artefactos y llamadas al modelo.
+
+```
+persistence/
+├── schema.py                   ← DDL, init_db(), migraciones por columna
+├── connection.py               ← get_connection(beto_dir)
+├── queries.py                  ← capa de lectura
+├── writers/
+│   ├── cycle_writer.py         ← CycleWriter: ensure_project, write_cycle, update_*
+│   ├── routing_writer.py       ← RoutingWriter: decisiones y promociones
+│   ├── snapshot_writer.py      ← SnapshotDBWriter: write, invalidate
+│   ├── oq_writer.py            ← OQWriter: sync_from_dicts, sync_from_beto_state
+│   ├── gate_writer.py          ← GateWriter: write
+│   └── artifact_writer.py      ← ArtifactDBWriter: write (upsert)
+├── readers/
+│   └── state_reader.py         ← build_state_payload(beto_dir, cycle_id)
+└── migrate/
+    └── legacy_json_backfill.py ← migrate_project(beto_dir)
+```
+
+**Diseño de conexión:** `get_connection(beto_dir)` abre una conexión nueva por operación con WAL mode y foreign keys habilitados. No hay conexión compartida entre writers — compatible con el modelo de ejecución single-process de BETO sin requerir gestión de estado de conexión.
+
+**Schema:** 11 tablas — `projects`, `cycles`, `routing_decisions`, `route_promotions`, `snapshots`, `open_questions`, `beto_gaps`, `gate_decisions`, `artifacts`, `model_calls`, `schema_version`. `init_db()` es idempotente: safe to call en cada inicio de ciclo.
+
+---
+
+### 16.4 Ensamblador canónico: `build_state_payload()`
+
+```python
+from persistence.readers.state_reader import build_state_payload
+payload = build_state_payload(beto_dir, cycle_id)
+```
+
+Devuelve el estado canónico del ciclo construido desde SQLite. Incluye:
+
+- Campos Phase 2: `cycle_id`, `project_id`, `route_mode`, `system_intent`, `system_boundaries`, `stable_decisions`, `open_questions`, `resolved_questions`, `routing`, `artifacts`, `gates`, `metadata`
+- Aliases legacy para compatibilidad: `ciclo_id`, `paso_actual`, `oqs_abiertas`, `oqs_cerradas`
+- `metadata.rendered_from = "sqlite"` — siempre
+
+`BETO_STATE.json` es el resultado de escribir este payload al disco, complementado con campos extraídos de markdown (`nodos`, campos OSC) que aún no tienen columnas SQLite propias.
+
+---
+
+### 16.5 Modo SQLite-only en `BETOStateWriter`
+
+**Carga de estado inicial (`_load_or_create`):**
+Lee desde tablas `cycles` y `open_questions`. Si la base de datos no existe, retorna un `BETOState` vacío. Si el ciclo no está registrado, retorna un `BETOState` vacío. Los nodos y campos OSC se re-extraen de artefactos markdown en cada paso.
+
+**Auto-creación de base de datos:**
+Si `beto.db` no existe al momento de `update()`, se crea automáticamente con `init_db()`. No hay configuración manual requerida.
+
+**Política de render (sin fallback):**
+```
+init_db() si ausente
+→ _push_to_db(state, paso)      ← no-fatal: warning en stderr si falla
+→ _do_phase4_render(state)      ← raise inmediato si falla — sin fallback
+```
+
+En v4.4 existía un sistema de fallback con `fallback_reason = DB_NOT_FOUND | PHASE2_RENDER_FAILED` y un modo strict configurable via `BETO_STRICT_PHASE2`. Ambos fueron eliminados en v4.5: el sistema siempre falla explícitamente si el render falla.
+
+**Gates desde SQLite (`_load_gates_from_db`):**
+Reemplaza `_update_from_state_json()` que leía el Gestor de Ciclo JSON (`{ciclo_id}.json`). Las decisiones de gate se cargan desde la tabla `gate_decisions` y se convierten al formato legacy `decisiones_gate`.
+
+---
+
+### 16.6 Hookup de GateWriter en el motor
+
+Cada vez que `GatesOperador.procesar_gate()` devuelve una decisión, el motor persiste el resultado en SQLite:
+
+```python
+resultado = self.gates.procesar_gate(self.ciclo_id, señal)
+# → GateWriter.write(beto_dir, cycle_id, gate_id, decision, paso)
+```
+
+La decisión del operador ("aprobado" / "rechazado") se normaliza a "APPROVED" / "REJECTED" antes de persistir. La operación es no-fatal — un fallo de escritura emite un warning y no bloquea la ejecución.
+
+---
+
+### 16.7 Routing y snapshots: backend único
+
+**Routing decisions y promotions:**
+`ExecutionRouter._persist_decision()` y `_persist_promotion()` escriben exclusivamente a SQLite. Los directorios `.beto/routing/decisions/` y `.beto/routing/promotions/` ya no se crean ni escriben en runtime.
+
+**Snapshots:**
+`SnapshotWriter` (en `execution_router/`) ya no escribe archivos. Su rol es generar IDs únicos y cargar contadores desde la tabla `snapshots` al inicializar — garantizando que IDs no se reusen en ciclos reanudados. La escritura a DB la ejecuta `SnapshotDBWriter` (en `persistence/writers/`).
+
+**ProjectIndexExporter:**
+`ProjectIndexWriter` fue renombrado a `ProjectIndexExporter`. El método principal es `export()`. Tanto `write()` como `ProjectIndexWriter` se preservan como aliases de compatibilidad — el código existente no requiere cambios.
+
+---
+
+### 16.8 Backfill de proyectos legacy
+
+Para proyectos ejecutados bajo v4.3/v4.4 que tienen sus datos en JSON:
+
+```python
+from persistence.migrate.legacy_json_backfill import migrate_project
+report = migrate_project(Path(".beto"))
+print(report.summary())
+```
+
+`migrate_project(beto_dir)` escanea la estructura estándar:
+
+| Fuente | Destino |
+|---|---|
+| `{cycle_dir}/BETO_STATE.json` | tablas `cycles`, `open_questions`, `gate_decisions` |
+| `.beto/routing/decisions/*.json` | tabla `routing_decisions` |
+| `.beto/routing/promotions/*.json` | tabla `route_promotions` |
+| `.beto/snapshots/*.json` | tabla `snapshots` |
+| `.beto/project_index.json` | tabla `artifacts` |
+
+La operación es idempotente (`INSERT OR IGNORE` en todas las escrituras) y no destructiva (no modifica ni elimina los archivos JSON fuente). El `BackfillReport` devuelto incluye conteos por tabla y warnings sobre datos no encontrados.
+
+---
+
+### 16.9 Herramienta de auditoría: `parity_check`
+
+`persistence/parity_check.py` es ahora una herramienta de auditoría manual, no un mecanismo de runtime. Su semántica en v4.5:
+
+- Registros presentes en JSON pero ausentes de DB → divergencia reportada (indica un write a DB que se perdió)
+- Registros presentes solo en DB → estado correcto en v4.5, no reportado
+
+Se puede invocar sobre cualquier ciclo para verificar que un backfill fue completo o que no quedan archivos JSON legacy sin importar.
+
+---
+
+### 16.10 Compatibilidad y migración
+
+| Elemento | Estado |
+|---|---|
+| `BETO_STATE.json` | Compatible — sigue existiendo como proyección renderizada |
+| `ProjectIndexWriter` | Compatible — alias a `ProjectIndexExporter` |
+| `write()` en project_index | Compatible — alias a `export()` |
+| Ciclos v4.3/v4.4 | Migrables con `migrate_project()` — operación segura e idempotente |
+| Nuevas dependencias | Ninguna — sqlite3 stdlib |
+| Protocolo BETO | Sin cambios |
+
+---
+
+*Framework BETO v4.5 — Alberto Ramírez — 2026*

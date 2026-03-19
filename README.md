@@ -4,7 +4,7 @@
 
 BETO is an epistemic governance protocol for LLM-assisted software specification and materialization. It enforces a formal boundary between what the operator has declared and what the model has assumed — preventing the silent completion problem that makes AI-generated software unauditable.
 
-**Version:** 4.4.0 (March 2026) · **Author:** Alberto Ramírez · **License:** MIT
+**Version:** 4.5.0 (March 2026) · **Author:** Alberto Ramírez · **License:** MIT
 
 ---
 
@@ -80,11 +80,30 @@ BETO v4.4 optimizes *how* BETO executes internally without changing *what* BETO 
 
 - **Simple task absorption** — `BETO_LIGHT_PATH` handles tasks that previously required a separate external skill surface, keeping them inside the unified executor under the same epistemic rules.
 
-- **PROJECT_INDEX** — a persistent JSON index (`.beto/project_index.json`) that locates artifacts without repeated global exploration.
+- **PROJECT_INDEX** — a persistent artifact index (`.beto/project_index.json`) that locates artifacts without repeated global exploration. *(v4.5: generated on demand from SQLite — not a runtime source of truth.)*
 
 - **MODEL_CALL_PLAN** — every model call is governed, logged, and auditable via `EXECUTION_PERFORMANCE_LOG`.
 
 All routing decisions and route promotions (LIGHT→PARTIAL→FULL) are traceable — no silent routing. Full specification in `framework/EXECUTION_ROUTER.md` and `BETO_INSTRUCTIVO.md`.
+
+---
+
+## v4.5 — SQLite Persistence Layer
+
+BETO v4.5 completes the migration of all runtime persistence from scattered JSON files to a local SQLite database. The Executor now operates with SQLite as the sole source of truth for cycle state, routing decisions, snapshots, OQs, gate decisions, and artifacts.
+
+**What v4.5 changes in the Executor:**
+
+- **Transversal persistence layer** (`persistence/`) — 11 tables, WAL mode, per-operation connections, no shared state, no external dependencies (sqlite3 stdlib only)
+- **Canonical state assembler** — `build_state_payload(beto_dir, cycle_id)` renders `BETO_STATE.json` from SQLite; the file is a projection, not a store
+- **SQLite-only writer** — `BETOStateWriter` auto-creates the database if absent, loads prior state from SQLite on resume, and raises immediately on render failure — no fallback, no silent degradation
+- **Gate persistence** — `GateWriter` connected in the reasoning motor; every gate decision is stored with timestamp and cycle linkage
+- **Legacy backfill** — `migrate_project(beto_dir)` migrates existing JSON-based projects to SQLite; idempotent, non-destructive
+- **JSON routing/snapshot writes eliminated** — `.beto/routing/decisions/`, `.beto/routing/promotions/`, `.beto/snapshots/` are no longer written at runtime
+
+**What v4.5 does not change:**
+
+The BETO Protocol, the 11-step process, all formal templates, human gates, epistemic states, and the BETO_STATE.json interface for external consumers — all unchanged. v4.4 artifacts remain fully valid.
 
 ---
 
@@ -152,6 +171,11 @@ beto-framework/
 ├── beto_executor/                   ← Automated pipeline (Python)
 │   └── src/
 │       ├── main.py
+│       ├── persistence/             ← v4.5: transversal SQLite layer
+│       │   ├── schema.py, connection.py, queries.py
+│       │   ├── writers/             ← cycle, routing, snapshot, oq, gate, artifact
+│       │   ├── readers/             ← state_reader (build_state_payload)
+│       │   └── migrate/             ← legacy_json_backfill
 │       ├── execution_router/        ← v4.4: internal routing layer
 │       ├── orquestador/
 │       ├── motor_razonamiento/
@@ -194,12 +218,13 @@ Full text: [research/BETO_Framework_Technical_Article.md](research/BETO_Framewor
 
 ## Status
 
-**Current:** BETO v4.4.0 — Execution Efficiency and Routing Layer (March 2026)
+**Current:** BETO v4.5.0 — SQLite Persistence Layer (March 2026)
 
 **Version history:**
 
 | Version | Date | Change |
 |---------|------|--------|
+| v4.5.0 | 2026-03-18 | SQLite Persistence Layer — sole runtime backend, canonical state assembler, legacy backfill, JSON writes eliminated |
 | v4.4.0 | 2026-03-18 | Execution Efficiency and Routing Layer — internal routing, stratified context, snapshots, PROJECT_INDEX, MODEL_CALL_PLAN, simple task absorption |
 | v4.3.0 | 2026-03-17 | Operational Semantic Closure (OSC) Layer — DECLARED_EXECUTABLE states, EXECUTION_READINESS_CHECK, Gate G-2B |
 | v4.2.0 | 2026-03-12 | Public release — 11-step protocol, BETO_EXECUTOR, BETO Skill |
