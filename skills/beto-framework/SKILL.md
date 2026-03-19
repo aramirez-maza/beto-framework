@@ -4,7 +4,7 @@ description: Epistemic governance protocol for LLM-assisted software specificati
 license: MIT
 metadata:
   author: Alberto Ramirez
-  version: 4.4.0
+  version: 4.4.1
   github: github.com/aramirez-maza/beto-framework
 ---
 
@@ -227,11 +227,33 @@ Include in the manifest:
 
 ### Step 10 — Materialization
 Only after G-3 approval:
+
+#### Pre-materialization: Cross-Module Contract Map
+
+Before generating any file, build a **contract map** from the TRACE_REGISTRY:
+
+1. **Identify shared types** — scan entries typed `SEC4.FIELD`, `SEC4.MODEL`, or `SEC6.MODEL`. A type is *shared* if it appears in the declarations of two or more components.
+
+2. **Determine ownership** — the owner is the component whose SEC6 declaration contains a production verb for that type: *produces, returns, emits, creates, builds, generates, yields*. If ambiguous, assign to the component with the most references to that type. Each shared type must have exactly one owner.
+
+3. **Determine consumers** — components whose declarations reference the shared type but are not the owner.
+
+4. **Build scaffold contract per file**:
+   - **Owner file**: include the type definition in the stub (e.g. `@dataclass class TypeName: field1, field2`)
+   - **Consumer file**: include `import: from owner_module.owner_file import TypeName` in the stub — this generates a real Python import, not a comment
+   - **All files**: derive typed method signatures from SEC6 component and SEC7 phase declarations (e.g. `scan(directory: str) -> list[TypeName]`)
+   - **Entry point file** (main.py or equivalent): generate a CLI stub with `funcs: main() — CLI entry point: parse args, orchestrate pipeline`
+
+This step is mandatory. Generating files without the contract map risks shared type duplication across modules.
+
+#### Generation
+
 - Build phase by phase, following declared dependencies
 - Every generated code element must carry a BETO-TRACE annotation referencing an ID from the TRACE_REGISTRY
 - Any ID not in the TRACE_REGISTRY → `BETO_GAP [ESCALATED]` → mandatory halt
 
-Verification before delivery:
+#### Verification before delivery
+
 - Extract all BETO-TRACE IDs from generated files
 - Verify each exists in the corresponding TRACE_REGISTRY
 - If all verified → status: TRACE_VERIFIED
@@ -352,11 +374,11 @@ Respond in the operator's language. BETO operates in Spanish and English.
 
 ## Version and Updates
 
-**Current version:** 4.4.0
+**Current version:** 4.4.1
 
 When the operator starts a BETO session, display the version once:
 ```
-BETO Skill v4.4.0 — github.com/aramirez-maza/beto-framework
+BETO Skill v4.4.1 — github.com/aramirez-maza/beto-framework
 ```
 
 If the operator asks about updates or the current version, tell them:
