@@ -1,3 +1,8 @@
+> **Status:** v4.5.0 — Stable, field-tested. Protocol: production-ready.
+> Executor: active development. Skill: available for Claude Code.
+> Three complete empirical cycles — 43 source files — 100% TRACE_VERIFIED
+> — 0 silent completions.
+
 # BETO Framework
 
 > **BETO formalizes the ignorance of an AI.**
@@ -113,6 +118,33 @@ The BETO Protocol, the 11-step process, all formal templates, human gates, epist
 BETO Protocol can be executed manually, via the Executor (the reference implementation), or via the Skill (a Claude integration). See the full guide for both automated paths:
 
 → **[docs/quickstart.md](docs/quickstart.md)**
+
+## 5-Minute Start
+
+**Requirements:** Python 3.11+, an OpenAI-compatible API endpoint
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/aramirez-maza/beto-framework.git
+cd beto-framework
+
+# 2. Install dependencies
+pip install openai
+
+# 3. Configure your API endpoint
+export OPENAI_API_BASE="http://localhost:8000/v1"  # or your endpoint
+export OPENAI_API_KEY="your-key"
+
+# 4. Run the executor with an idea
+cd beto_executor/src
+python main.py "Your idea here"
+
+# 5. Follow the human gates — the executor will pause for your approval
+#    at G-1 (topology), G-2 (specification), and G-3 (manifest)
+```
+
+> For the BETO Skill (Claude Code / Claude.ai, no infrastructure):
+> see `skills/beto-framework/SKILL.md`
 
 ---
 
