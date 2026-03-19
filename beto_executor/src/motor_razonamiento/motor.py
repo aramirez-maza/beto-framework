@@ -76,7 +76,7 @@ class MotorRazonamiento:
             from persistence.writers.snapshot_writer import SnapshotDBWriter
             from persistence.writers.oq_writer import OQWriter
             from persistence.writers.artifact_writer import ArtifactDBWriter
-            self._snapshot_db_writer = SnapshotDBWriter(beto_dir=beto_dir, ciclo_id=ciclo_id)
+            self._snapshot_db_writer = SnapshotDBWriter(beto_dir=beto_dir, cycle_id=ciclo_id)
             self._oq_writer = OQWriter(beto_dir=beto_dir, cycle_id=ciclo_id)
             self._artifact_db_writer = ArtifactDBWriter(beto_dir=beto_dir, cycle_id=ciclo_id)
         else:

@@ -90,6 +90,13 @@ def main():
              "(BETO_CORE_TEMPLATE.md, BETO_CORE_INTERVIEW.md, etc.). "
              "Si no se provee, el motor opera sin templates en contexto.",
     )
+    parser.add_argument(
+        "--auto-approve",
+        action="store_true",
+        default=False,
+        help="Modo test: aprueba automáticamente todos los gates (G-1, G-2, G-3). "
+             "No usar en producción.",
+    )
 
     args = parser.parse_args()
 
@@ -118,6 +125,7 @@ def main():
         "api_key": args.api_key,
         "g4_configurado": args.g4,
         "templates_dir": args.templates_dir,
+        "auto_approve": args.auto_approve,
     }
 
     if args.config:

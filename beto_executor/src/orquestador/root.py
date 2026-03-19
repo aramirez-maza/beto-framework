@@ -63,6 +63,7 @@ class BETOExecutorRoot:
         self.code_model = config["code_model"]
         # BETO-TRACE: BETO_EXECUTOR.SEC8.DECISION.G4_OPTIONAL
         self.g4_configurado = config.get("g4_configurado", False)
+        self.auto_approve = config.get("auto_approve", False)
         self.code_output_subdir = config.get("code_output_subdir", "src")
 
         # Directorio de templates del framework BETO
@@ -120,7 +121,7 @@ class BETOExecutorRoot:
         cycle_dir.mkdir(parents=True, exist_ok=True)
 
         state_manager = StateManager(self.cycle_output_dir)
-        gates = GatesOperador(state_manager, cycle_dir=cycle_dir)
+        gates = GatesOperador(state_manager, cycle_dir=cycle_dir, auto_approve=self.auto_approve)
 
         # — v4.4: Initial routing at cycle start —
         # BETO-TRACE: BETO_V44.SEC7.PHASE.PHASE_6_EXECUTOR_INTEGRATION
@@ -221,8 +222,12 @@ class BETOExecutorRoot:
         print(f"[ROOT] Handoff recibido: {handoff_path}")
         # Copiar GENERATOR_RULES al cycle_dir (auditabilidad + RULE_003)
         _src_rules = Path(__file__).parent.parent.parent / "GENERATOR_RULES_BETO_EXECUTOR.md"
-        if _src_rules.exists():
-            shutil.copy2(_src_rules, handoff_path / "GENERATOR_RULES_BETO_EXECUTOR.md")
+        if not _src_rules.exists():
+            raise RuntimeError(
+                f"GENERATOR_RULES ausente: {_src_rules}\n"
+                "Coloca GENERATOR_RULES_BETO_EXECUTOR.md en beto_executor/ antes de ejecutar. (RULE_003)"
+            )
+        shutil.copy2(_src_rules, handoff_path / "GENERATOR_RULES_BETO_EXECUTOR.md")
 
         output_dir = cycle_dir / self.code_output_subdir
 
@@ -264,7 +269,7 @@ class BETOExecutorRoot:
 
         cycle_dir = self.cycle_output_dir / ciclo_id
         state_manager = StateManager(self.cycle_output_dir)
-        gates = GatesOperador(state_manager, cycle_dir=cycle_dir)
+        gates = GatesOperador(state_manager, cycle_dir=cycle_dir, auto_approve=self.auto_approve)
 
         if motor_destino == "MOTOR_RAZONAMIENTO":
             # v4.4 — restore routing context for resumed cycle
@@ -337,8 +342,12 @@ class BETOExecutorRoot:
 
         # Copiar GENERATOR_RULES al cycle_dir (auditabilidad + RULE_003)
         _src_rules = Path(__file__).parent.parent.parent / "GENERATOR_RULES_BETO_EXECUTOR.md"
-        if _src_rules.exists():
-            shutil.copy2(_src_rules, handoff_path / "GENERATOR_RULES_BETO_EXECUTOR.md")
+        if not _src_rules.exists():
+            raise RuntimeError(
+                f"GENERATOR_RULES ausente: {_src_rules}\n"
+                "Coloca GENERATOR_RULES_BETO_EXECUTOR.md en beto_executor/ antes de ejecutar. (RULE_003)"
+            )
+        shutil.copy2(_src_rules, handoff_path / "GENERATOR_RULES_BETO_EXECUTOR.md")
 
         output_dir = cycle_dir / self.code_output_subdir
         motor_cod = MotorCodigo(

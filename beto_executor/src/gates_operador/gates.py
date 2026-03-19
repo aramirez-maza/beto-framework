@@ -34,9 +34,10 @@ class GatesOperador:
     recepción → presentación → captura → resolución.
     """
 
-    def __init__(self, state_manager, cycle_dir=None):
+    def __init__(self, state_manager, cycle_dir=None, auto_approve: bool = False):
         self.state_manager = state_manager
         self.cycle_dir = cycle_dir
+        self.auto_approve = auto_approve
 
     def procesar_gate(self, ciclo_id: str, señal: dict) -> dict:
         """
@@ -86,9 +87,17 @@ class GatesOperador:
         if beto_gap:
             # BETO-TRACE: BETO_GATES.SEC8.DECISION.GAP_PRESENTED_AT_GATE
             presentar_gap(beto_gap)
-            resolucion_gap = capturar_resolucion_gap()
+            if self.auto_approve:
+                resolucion_gap = "[AUTO-APPROVE] Gap acknowledged in test mode."
+                print("  [AUTO-APPROVE] Gap resolution auto-registered.")
+            else:
+                resolucion_gap = capturar_resolucion_gap()
 
-        captura = capturar_decision(paso_origen)
+        if self.auto_approve:
+            print("  [AUTO-APPROVE] Gate aprobado automáticamente (modo test).")
+            captura = {"decision": "aprobado", "justificacion_opcional": ""}
+        else:
+            captura = capturar_decision(paso_origen)
         # BETO-TRACE: BETO_GATES.SEC5.INVARIANT.OPERATOR_DECISION_IMMUTABLE
         decision = captura["decision"]
         justificacion = captura["justificacion_opcional"]
