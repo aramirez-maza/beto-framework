@@ -6,6 +6,56 @@ Format: `[version] — date — description`
 
 ---
 
+## [4.5.0] — 2026-03-18
+
+**BETO Framework v4.5 — SQLite Persistence Layer**
+
+Cierra la migración de persistencia iniciada en v4.4. El Executor opera ahora con SQLite como única fuente de verdad para todo el estado de ciclo en runtime. Los archivos JSON que funcionaban como base de datos implícita han sido degradados a formato de salida derivada.
+
+**Capa de persistencia transversal (`persistence/`):**
+- `schema.py` — DDL completo con 11 tablas: projects, cycles, routing_decisions, route_promotions, snapshots, open_questions, beto_gaps, gate_decisions, artifacts, model_calls, schema_version
+- `connection.py` — `get_connection(beto_dir)`: WAL mode, foreign keys habilitados, row_factory sqlite3.Row; conexiones por operación, sin estado compartido
+- `queries.py` — capa de lectura: `get_cycle`, `get_open_oqs`, `get_closed_oqs`, `get_active_snapshots`, `get_routing_decisions`, `get_route_promotions`, `get_artifacts`, `get_gate_decisions`, `get_latest_gates`, `get_all_cycles`
+- `writers/` — cycle_writer, routing_writer, snapshot_writer, oq_writer, gate_writer, artifact_writer; todos idempotentes (upsert)
+- `readers/state_reader.py` — `build_state_payload(beto_dir, cycle_id)`: ensamblador canónico del estado desde SQLite; incluye aliases legacy para compatibilidad con context_builder
+- `migrate/legacy_json_backfill.py` — `migrate_project(beto_dir)`: backfill idempotente desde archivos JSON legacy; INSERT OR IGNORE en toda operación
+
+**Motor de estado (`beto_state/writer.py`) — modo SQLite-only:**
+- `_load_or_create()` lee desde SQLite (tablas `cycles` + `open_questions`) en lugar de BETO_STATE.json
+- `_load_gates_from_db()` reemplaza `_update_from_state_json()` — gates desde tabla `gate_decisions`
+- `_attempt_phase4_render()` auto-crea beto.db si está ausente; sin fallback; propaga excepciones sin silenciar
+- `_do_phase4_render(state)` construye desde SQLite y complementa con campos extraídos de markdown (nodos, OSC)
+- Eliminados: `STRICT_PHASE2_DB_RENDER`, `_save()`, `_annotate_metadata()`, `_handle_render_failure()`
+
+**Motor de razonamiento (`motor_razonamiento/motor.py`):**
+- `GateWriter.write()` conectado después de cada `procesar_gate()` — decisiones de gate persistidas en SQLite
+- Conteo de OQs en AQ snapshot vía `get_open_oqs()` — elimina lectura directa de BETO_STATE.json
+- Sincronización redundante de OQs eliminada (ya cubierta por `_push_to_db` en writer)
+
+**Routing y snapshots:**
+- `execution_router/router.py` — JSON write eliminado; SQLite es el único backend
+- `execution_router/snapshot_writer.py` — ya no escribe archivos; genera IDs y carga contadores desde SQLite al inicializar
+- `execution_router/project_index_writer.py` — renombrado a `ProjectIndexExporter`; genera `project_index.json` desde SQLite bajo demanda; `ProjectIndexWriter` y `write()` preservados como aliases de compatibilidad
+
+**Parity check:**
+- `persistence/parity_check.py` — degradado a herramienta de auditoría manual; solo reporta registros presentes en JSON pero ausentes de DB (la condición inversa es el estado correcto en v4.5)
+
+**Tests:**
+- `outputs/v45_tests/run_phase1_tests.py` — 38/38 ✓
+- `outputs/v45_tests/run_phase2_tests.py` — 9/9 ✓
+- `outputs/v45_tests/run_phase2_fallback_tests.py` — 5/5 ✓ (actualizados a semántica Phase 4)
+- `outputs/v45_tests/run_edge_case_tests.py` — 35/35 ✓
+- `outputs/v45_tests/run_phase4_tests.py` — 51/51 ✓ (nuevo)
+- Total: 138/138 checks passing
+
+**Compatibilidad:**
+- BETO_STATE.json sigue existiendo como proyección derivada — lectores externos no requieren cambios
+- `ProjectIndexWriter` y `write()` funcionan sin modificación
+- Proyectos legacy migrables con `migrate_project(beto_dir)` — operación idempotente y no destructiva
+- Sin nuevas dependencias externas (sqlite3 stdlib)
+
+---
+
 ## [4.4.0] — 2026-03-18
 
 **BETO Framework v4.4 — Execution Efficiency and Routing Layer**
@@ -197,7 +247,7 @@ BETO v4.2 blocked what was NOT_STATED. BETO v4.3 also validates what IS declared
 
 ## [4.2.2] — 2026-03-14
 
-**Documentation: structural refactor**
+**Documentation: structural refactor + BETO Skill override evaluation**
 
 - `README.md` rewritten as landing page — problem, core idea, three-layer overview, guarantees, explicit limits, documentation map
 - `docs/` layer created with five new files: `quickstart.md`, `architecture.md`, `claims-and-boundaries.md`, `verification.md`, `faq.md`
@@ -205,15 +255,8 @@ BETO v4.2 blocked what was NOT_STATED. BETO v4.3 also validates what IS declared
 - `CHANGELOG.md` added
 - Hierarchy enforced throughout: Protocol → Executor (reference implementation) → Skill (integration path)
 - `DOCUMENTACION_OFICIAL_BETO.md` and `BETO_INSTRUCTIVO.md` preserved intact as full reference documents
-
----
-
-## [4.2.2] — 2026-03-14
-
-**BETO Skill — Assisted Mode override evaluation + version display**
-
-- Override evaluation rule added: when operator overrides a BETO_ASSISTED resolution, Skill evaluates scope consistency before accepting — triggers `BETO_GAP [ESCALATED]` if override introduces external dependencies or scope expansion
-- Version display added at session start: `BETO Skill v4.2.1 — github.com/...`
+- Override evaluation rule added to Skill: when operator overrides a BETO_ASSISTED resolution, Skill evaluates scope consistency before accepting — triggers `BETO_GAP [ESCALATED]` if override introduces external dependencies or scope expansion
+- Version display added at Skill session start: `BETO Skill v4.2.2 — github.com/...`
 - Update instructions added: operators can check installed version and update via `cp -r`
 
 ---

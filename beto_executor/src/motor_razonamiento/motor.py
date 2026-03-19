@@ -72,9 +72,19 @@ class MotorRazonamiento:
             beto_dir = cycle_dir / ".beto"
             self._snapshot_writer = SnapshotWriter(beto_dir=beto_dir, ciclo_id=ciclo_id)
             self._project_index_writer = ProjectIndexWriter(beto_dir=beto_dir, ciclo_id=ciclo_id)
+            # v4.5 dual-write writers
+            from persistence.writers.snapshot_writer import SnapshotDBWriter
+            from persistence.writers.oq_writer import OQWriter
+            from persistence.writers.artifact_writer import ArtifactDBWriter
+            self._snapshot_db_writer = SnapshotDBWriter(beto_dir=beto_dir, ciclo_id=ciclo_id)
+            self._oq_writer = OQWriter(beto_dir=beto_dir, cycle_id=ciclo_id)
+            self._artifact_db_writer = ArtifactDBWriter(beto_dir=beto_dir, cycle_id=ciclo_id)
         else:
             self._snapshot_writer = None
             self._project_index_writer = None
+            self._snapshot_db_writer = None
+            self._oq_writer = None
+            self._artifact_db_writer = None
 
     def ejecutar(self, paso_inicio: int = 0) -> Path:
         """
@@ -106,6 +116,15 @@ class MotorRazonamiento:
                         "estado": "GENERADO",
                     },
                 )
+                # v4.5 dual-write — artifact to DB
+                if self._artifact_db_writer is not None:
+                    try:
+                        self._artifact_db_writer.write(
+                            file_path=str(self.cycle_dir / nombre),
+                            paso=paso,
+                        )
+                    except Exception as e:
+                        print(f"[PERSISTENCE] Warning: artifact DB write failed for {nombre} — {e}")
 
             self.state_manager.aplicar_evento(
                 self.ciclo_id,
@@ -120,6 +139,7 @@ class MotorRazonamiento:
                 self.beto_state_writer.update(paso)
             except Exception as e:
                 print(f"[BETO_STATE] Warning: update falló en paso {paso} — {e} (no bloquea)")
+
 
             # v4.4 — Snapshot generation (REGLA SNAPSHOT_INVALIDATION)
             # BETO-TRACE: BETO_V44.SEC7.PHASE.PHASE_2_CONTEXT_SNAPSHOT
@@ -140,6 +160,24 @@ class MotorRazonamiento:
                 }
 
                 resultado = self.gates.procesar_gate(self.ciclo_id, señal)
+
+                # Phase 4: persist gate decision to SQLite
+                if self.execution_router is not None:
+                    try:
+                        from persistence.writers.gate_writer import GateWriter
+                        _decision_map = {"aprobado": "APPROVED", "rechazado": "REJECTED"}
+                        _raw = resultado.get("decision", "UNKNOWN")
+                        _gate_decision = _decision_map.get(_raw.lower(), _raw.upper())
+                        beto_dir = self.cycle_dir / ".beto"
+                        GateWriter.write(
+                            beto_dir=beto_dir,
+                            cycle_id=self.ciclo_id,
+                            gate=gate_id,
+                            decision=_gate_decision,
+                            paso=paso,
+                        )
+                    except Exception as e:
+                        print(f"[PERSISTENCE] Warning: gate DB write failed for {gate_id} — {e}")
 
                 if resultado["señal_tipo"] == "RETROCESO":
                     # BETO-TRACE: BETO_MOTOR_RAZ.SEC6.MODEL.RETROCESO_HANDLER
@@ -232,6 +270,18 @@ class MotorRazonamiento:
                 "timestamp": now,
             },
         )
+        # v4.5 dual-write
+        if self._snapshot_db_writer is not None:
+            try:
+                self._snapshot_db_writer.write(
+                    snapshot_id=lc_id,
+                    snapshot_type="LOCAL_EXECUTION_CONTEXT",
+                    paso=paso,
+                    route_type=self.route_type,
+                    payload={"artifacts_generated": artefactos},
+                )
+            except Exception as e:
+                print(f"[PERSISTENCE] Warning: LC snapshot DB write failed at paso {paso} — {e}")
 
         # CS snapshot — after paso 4, PARTIAL/FULL only
         if paso == 4 and is_partial_or_full:
@@ -246,6 +296,24 @@ class MotorRazonamiento:
                     "timestamp": now,
                 },
             )
+            # v4.5 dual-write
+            if self._snapshot_db_writer is not None:
+                try:
+                    artifacts_in_scope = sorted(
+                        f.name for f in self.cycle_dir.glob("*.md") if f.is_file()
+                    )
+                    self._snapshot_db_writer.write(
+                        snapshot_id=cs_id,
+                        snapshot_type="CYCLE_CONTEXT_SNAPSHOT",
+                        paso=paso,
+                        route_type=self.route_type,
+                        payload={
+                            "artifacts_in_scope": artifacts_in_scope,
+                            "beto_state_captured": (self.cycle_dir / "BETO_STATE.json").exists(),
+                        },
+                    )
+                except Exception as e:
+                    print(f"[PERSISTENCE] Warning: CS snapshot DB write failed — {e}")
 
         # AQ snapshot — after paso 6, PARTIAL/FULL only
         if paso == 6 and is_partial_or_full:
@@ -260,6 +328,21 @@ class MotorRazonamiento:
                     "timestamp": now,
                 },
             )
+            # v4.5 dual-write — OQ count from SQLite (Phase 4: no BETO_STATE.json read)
+            if self._snapshot_db_writer is not None:
+                try:
+                    from persistence.queries import get_open_oqs
+                    beto_dir = self.cycle_dir / ".beto"
+                    oq_count = len(get_open_oqs(beto_dir, self.ciclo_id))
+                    self._snapshot_db_writer.write(
+                        snapshot_id=aq_id,
+                        snapshot_type="ACTIVE_OQ_SET",
+                        paso=paso,
+                        route_type=self.route_type,
+                        payload={"oqs_abiertas_count": oq_count},
+                    )
+                except Exception as e:
+                    print(f"[PERSISTENCE] Warning: AQ snapshot DB write failed — {e}")
 
         # MS snapshot — after paso 9, PARTIAL/FULL only
         if paso == 9 and is_partial_or_full:
@@ -274,3 +357,21 @@ class MotorRazonamiento:
                     "timestamp": now,
                 },
             )
+            # v4.5 dual-write
+            if self._snapshot_db_writer is not None:
+                try:
+                    scope_artifacts = sorted(
+                        f.name for f in self.cycle_dir.glob("*.md") if f.is_file()
+                    )
+                    self._snapshot_db_writer.write(
+                        snapshot_id=ms_id,
+                        snapshot_type="MATERIALIZATION_SCOPE",
+                        paso=paso,
+                        route_type=self.route_type,
+                        payload={
+                            "scope_artifacts": scope_artifacts,
+                            "manifest_present": (self.cycle_dir / "MANIFEST_PROYECTO.md").exists(),
+                        },
+                    )
+                except Exception as e:
+                    print(f"[PERSISTENCE] Warning: MS snapshot DB write failed — {e}")

@@ -52,3 +52,8 @@ What BETO changes is the nature of the error:
 BETO eliminates invisible errors. It does not eliminate human errors. The difference is that a traceable error can be found, attributed, and corrected. An invisible one cannot.
 
 → For the full breakdown of guarantees and limits: [claims-and-boundaries.md](claims-and-boundaries.md)
+
+---
+
+→ Ready to run? [quickstart.md](quickstart.md)
+→ How it works under the hood: [architecture.md](architecture.md)

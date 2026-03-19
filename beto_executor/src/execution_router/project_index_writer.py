@@ -75,13 +75,16 @@ def _route_relevance(name: str) -> str:
 
 # ─── Writer ───────────────────────────────────────────────────────────────────
 
-class ProjectIndexWriter:
+class ProjectIndexExporter:
     """
     BETO-TRACE: BETO_V44.SEC7.PHASE.PHASE_3_OPERATIONAL_ARTIFACTS
     BETO-TRACE: BETO_V44.SEC8.DECISION.ROUTING_CONFIG
+    BETO-TRACE: BETO_V45.SEC7.PHASE.PHASE_4_CLEANUP
 
-    Generates .beto/project_index.json from cycle artifacts.
-    Indexes: cycle markdown docs, routing decisions, snapshots.
+    Exports .beto/project_index.json on demand from SQLite + cycle artifacts.
+    Indexes: cycle markdown docs, routing decisions, snapshots (all from DB).
+
+    Phase 4: renamed from ProjectIndexWriter to ProjectIndexExporter.
     """
 
     def __init__(self, beto_dir: Path, ciclo_id: str) -> None:
@@ -89,7 +92,7 @@ class ProjectIndexWriter:
         self.beto_dir = beto_dir
         self.ciclo_id = ciclo_id
 
-    def write(
+    def export(
         self,
         cycle_dir: Path,
         updated_by: str = "materialization_executor",
@@ -130,85 +133,97 @@ class ProjectIndexWriter:
                 "v43_compatibility": "COMPATIBLE",
             })
 
-        # — ROUTING_DECISION_RECORD files —
-        decisions_dir = self.beto_dir / "routing" / "decisions"
-        if decisions_dir.exists():
-            for f in sorted(decisions_dir.glob("*.json")):
-                rel = str(f.relative_to(cycle_dir.parent))
-                entries.append({
-                    "file": rel,
-                    "file_type": "ROUTING_DECISION_RECORD",
-                    "role": "routing",
-                    "phase_associated": None,
-                    "unit_id": None,
-                    "dependencies": [],
-                    "trace_ids_authorized": ["BETO_V44.SEC9.ROUTING_DECISION.RECORD"],
-                    "manifest_associated": None,
-                    "contract_associated": None,
-                    "materialization_status": "COMPLETE",
-                    "last_updated": now,
-                    "route_relevance": "ALL_ROUTES",
-                    "execution_locality": "GLOBAL",
-                    "snapshot_dependencies": [],
-                    "v43_compatibility": "NEW_IN_V44",
-                })
+        # — ROUTING_DECISION_RECORD entries (from SQLite, Phase 3) —
+        # JSON files are no longer written; records are read from DB.
+        try:
+            from persistence.connection import get_connection
+            conn = get_connection(self.beto_dir)
+            try:
+                decision_rows = conn.execute(
+                    "SELECT decision_id FROM routing_decisions WHERE cycle_id = ? ORDER BY created_at",
+                    (self.ciclo_id,),
+                ).fetchall()
+                for row in decision_rows:
+                    did = row["decision_id"]
+                    entries.append({
+                        "file": f".beto/routing/decisions/{did}",
+                        "file_type": "ROUTING_DECISION_RECORD",
+                        "role": "routing",
+                        "phase_associated": None,
+                        "unit_id": None,
+                        "dependencies": [],
+                        "trace_ids_authorized": ["BETO_V44.SEC9.ROUTING_DECISION.RECORD"],
+                        "manifest_associated": None,
+                        "contract_associated": None,
+                        "materialization_status": "COMPLETE",
+                        "last_updated": now,
+                        "route_relevance": "ALL_ROUTES",
+                        "execution_locality": "GLOBAL",
+                        "snapshot_dependencies": [],
+                        "v43_compatibility": "NEW_IN_V44",
+                    })
 
-        # — ROUTE_PROMOTION_RECORD files —
-        promotions_dir = self.beto_dir / "routing" / "promotions"
-        if promotions_dir.exists():
-            for f in sorted(promotions_dir.glob("*.json")):
-                rel = str(f.relative_to(cycle_dir.parent))
-                entries.append({
-                    "file": rel,
-                    "file_type": "ROUTE_PROMOTION_RECORD",
-                    "role": "routing",
-                    "phase_associated": None,
-                    "unit_id": None,
-                    "dependencies": [],
-                    "trace_ids_authorized": ["BETO_V44.SEC9.ROUTE_PROMOTION.RECORD"],
-                    "manifest_associated": None,
-                    "contract_associated": None,
-                    "materialization_status": "COMPLETE",
-                    "last_updated": now,
-                    "route_relevance": "ALL_ROUTES",
-                    "execution_locality": "GLOBAL",
-                    "snapshot_dependencies": [],
-                    "v43_compatibility": "NEW_IN_V44",
-                })
+                promotion_rows = conn.execute(
+                    "SELECT promotion_id FROM route_promotions WHERE cycle_id = ? ORDER BY created_at",
+                    (self.ciclo_id,),
+                ).fetchall()
+                for row in promotion_rows:
+                    pid = row["promotion_id"]
+                    entries.append({
+                        "file": f".beto/routing/promotions/{pid}",
+                        "file_type": "ROUTE_PROMOTION_RECORD",
+                        "role": "routing",
+                        "phase_associated": None,
+                        "unit_id": None,
+                        "dependencies": [],
+                        "trace_ids_authorized": ["BETO_V44.SEC9.ROUTE_PROMOTION.RECORD"],
+                        "manifest_associated": None,
+                        "contract_associated": None,
+                        "materialization_status": "COMPLETE",
+                        "last_updated": now,
+                        "route_relevance": "ALL_ROUTES",
+                        "execution_locality": "GLOBAL",
+                        "snapshot_dependencies": [],
+                        "v43_compatibility": "NEW_IN_V44",
+                    })
 
-        # — Snapshot files —
-        snapshots_dir = self.beto_dir / "snapshots"
-        if snapshots_dir.exists():
-            for f in sorted(snapshots_dir.glob("*.json")):
-                rel = str(f.relative_to(cycle_dir.parent))
-                # Determine snapshot type from prefix
-                prefix = f.stem.split("-")[0]  # LC, CS, AQ, MS
-                snap_type_map = {
+                _SNAP_TYPE_MAP = {
                     "LC": "LOCAL_EXECUTION_CONTEXT",
                     "CS": "CYCLE_CONTEXT_SNAPSHOT",
                     "AQ": "ACTIVE_OQ_SET",
                     "MS": "MATERIALIZATION_SCOPE",
                 }
-                snap_file_type = snap_type_map.get(prefix, "CYCLE_CONTEXT_SNAPSHOT")
-                entries.append({
-                    "file": rel,
-                    "file_type": snap_file_type,
-                    "role": "snapshot",
-                    "phase_associated": None,
-                    "unit_id": None,
-                    "dependencies": [],
-                    "trace_ids_authorized": [
-                        "BETO_V44.SEC7.PHASE.PHASE_2_CONTEXT_SNAPSHOT"
-                    ],
-                    "manifest_associated": None,
-                    "contract_associated": None,
-                    "materialization_status": "COMPLETE",
-                    "last_updated": now,
-                    "route_relevance": "PARTIAL_AND_FULL" if prefix != "LC" else "ALL_ROUTES",
-                    "execution_locality": "SUBPROBLEM_LOCAL",
-                    "snapshot_dependencies": [],
-                    "v43_compatibility": "NEW_IN_V44",
-                })
+                snapshot_rows = conn.execute(
+                    "SELECT snapshot_id FROM snapshots WHERE cycle_id = ? ORDER BY created_at",
+                    (self.ciclo_id,),
+                ).fetchall()
+                for row in snapshot_rows:
+                    sid = row["snapshot_id"]
+                    prefix = sid.split("-")[0]
+                    snap_file_type = _SNAP_TYPE_MAP.get(prefix, "CYCLE_CONTEXT_SNAPSHOT")
+                    entries.append({
+                        "file": f".beto/snapshots/{sid}",
+                        "file_type": snap_file_type,
+                        "role": "snapshot",
+                        "phase_associated": None,
+                        "unit_id": None,
+                        "dependencies": [],
+                        "trace_ids_authorized": [
+                            "BETO_V44.SEC7.PHASE.PHASE_2_CONTEXT_SNAPSHOT"
+                        ],
+                        "manifest_associated": None,
+                        "contract_associated": None,
+                        "materialization_status": "COMPLETE",
+                        "last_updated": now,
+                        "route_relevance": "PARTIAL_AND_FULL" if prefix != "LC" else "ALL_ROUTES",
+                        "execution_locality": "SUBPROBLEM_LOCAL",
+                        "snapshot_dependencies": [],
+                        "v43_compatibility": "NEW_IN_V44",
+                    })
+            finally:
+                conn.close()
+        except Exception:
+            pass  # DB unavailable — index contains only markdown artifacts
 
         config = routing_config or {
             "light_max": 5,
@@ -237,3 +252,10 @@ class ProjectIndexWriter:
         path = self.beto_dir / "project_index.json"
         path.write_text(json.dumps(index, ensure_ascii=False, indent=2), encoding="utf-8")
         return path
+
+    # Backward-compat alias — callers using write() continue to work unchanged
+    write = export
+
+
+# Backward-compat alias — import sites using ProjectIndexWriter continue to work
+ProjectIndexWriter = ProjectIndexExporter
