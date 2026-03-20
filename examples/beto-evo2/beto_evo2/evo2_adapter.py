@@ -150,6 +150,16 @@ class Evo2Adapter:
                     latency_ms=latency_ms,
                     error=None,
                 )
+            except RateLimitError as e:
+                # Rate limit: no reintenta — informa con claridad
+                latency_ms = int(time.time() * 1000) - start_ms
+                return RawEvo2Response(
+                    output="",
+                    model_used=model_id,
+                    payload_hash=gate_record.payload_hash,
+                    latency_ms=latency_ms,
+                    error=f"RATE_LIMITED: {e}",
+                )
             except NetworkError as e:
                 if attempt < max_network_retries:
                     print(f"[BETO-EVO2] Error de red — reintento {attempt + 1}/{max_network_retries}")
@@ -161,7 +171,7 @@ class Evo2Adapter:
                     model_used=model_id,
                     payload_hash=gate_record.payload_hash,
                     latency_ms=latency_ms,
-                    error=f"NetworkError tras {max_network_retries} reintento(s): {e}",
+                    error=f"FAILED_REMOTE: NetworkError tras {max_network_retries} reintento(s): {e}",
                 )
             except ModelError as e:
                 # BETO-TRACE: BETO-EVO2.SEC6.METHOD.Evo2Adapter.handle_error
@@ -224,6 +234,15 @@ class Evo2Adapter:
         if response.status_code in (503, 504, 502):
             raise NetworkError(f"HTTP {response.status_code}: {response.text[:200]}")
 
+        # Rate limit — clasificado separadamente con instruccion clara
+        if response.status_code == 429:
+            retry_after = response.headers.get("Retry-After", "60")
+            raise RateLimitError(
+                f"NVIDIA NIM rate limit alcanzado. "
+                f"Espere {retry_after} segundos e intente nuevamente. "
+                f"Respuesta: {response.text[:200]}"
+            )
+
         # Errores de modelo (4xx) — requieren decision del operador
         if response.status_code >= 400:
             raise ModelError(
@@ -282,3 +301,7 @@ class NetworkError(Exception):
 
 class ModelError(Exception):
     """Error de modelo — requiere decision del operador."""
+
+
+class RateLimitError(Exception):
+    """Rate limit de NIM API (429) — esperar Retry-After antes de reintentar."""

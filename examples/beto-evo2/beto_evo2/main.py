@@ -40,6 +40,7 @@ def run_pipeline(
     request: GenomicRequest,
     hf_token: str | None = None,
     db_path: str = "beto_evo2.db",
+    dry_run: bool = False,
 ) -> AuthorizedEvo2Result:
     """
     Pipeline BETO-EVO2 completo.
@@ -132,15 +133,36 @@ def run_pipeline(
 
     print("\n  Gates A, B, C: APROBADOS por el operador.")
 
+    # ── DRY_RUN: detener aqui sin llamar a Evo2 ────────────────
+    if dry_run:
+        payload = evo2_adapter.build_payload(critical)
+        print("\n" + "=" * 54)
+        print("  DRY_RUN — Spec y gates validados. Sin llamada a Evo2.")
+        print("=" * 54)
+        print("\nPayload que se enviaria a NVIDIA NIM:")
+        import json as _json
+        print(_json.dumps(payload, indent=2))
+        print(f"\nSpec hash: {trace_logger._compute_spec_hash(param_map)}")
+        print("\nNingun credito NIM fue utilizado.")
+        sys.exit(0)
+
     # ── FASE 3: Ejecucion Autorizada ───────────────────────────
     # BETO-TRACE: BETO-EVO2.SEC7.PHASE.Fase3_EjecucionAutorizada
     print("\n[FASE 3] Ejecutando Evo2 (parametros autorizados)...\n")
 
+    # Generar TRACE_ID antes de llamar a Evo2 — garantiza persistencia
+    # aunque el modelo falle (Fix: manifest perdido en fallo)
+    trace_id = trace_logger.generate_trace_id()
+
     evo2_response = evo2_adapter.execute(critical, gate_record)
 
     if evo2_response.error:
+        # Persistir spec y gates aunque Evo2 haya fallado
+        trace_logger.persist_failed(trace_id, param_map, gate_record, evo2_response.error)
         print(f"\n[BETO-EVO2] Error en Evo2: {evo2_response.error}")
-        print("El ciclo se interrumpe. El operador debe revisar la especificacion.")
+        print(f"  Decisiones del operador preservadas — TRACE_ID: {trace_id}")
+        print(f"  Status en SQLite: FAILED")
+        print("  El operador puede revisar la especificacion e intentar nuevamente.")
         sys.exit(1)
 
     print(f"  Modelo:    {evo2_response.model_used}")
@@ -151,7 +173,6 @@ def run_pipeline(
     # BETO-TRACE: BETO-EVO2.SEC7.PHASE.Fase4_AuditoriaTrazabilidad
     print("\n[FASE 4] Generando trazabilidad...\n")
 
-    trace_id = trace_logger.generate_trace_id()
     manifest  = trace_logger.build_manifest(param_map, gate_record, evo2_response)
     spec_hash = trace_logger.persist(trace_id, param_map, gate_record, evo2_response, manifest)
 
@@ -224,6 +245,12 @@ def main() -> None:
         help="Exportar TRACE_REGISTRY.json y salir",
     )
     parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Ejecutar Fases 1 y 2 (spec + gates) sin llamar a Evo2. "
+             "Genera manifest y payload para revision sin gastar creditos NIM.",
+    )
+    parser.add_argument(
         "--output",
         type=str,
         default=None,
@@ -259,6 +286,7 @@ def main() -> None:
         request=request,
         hf_token=args.hf_token,
         db_path=args.db,
+        dry_run=args.dry_run,
     )
 
     if args.output:

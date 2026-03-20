@@ -243,6 +243,81 @@ class TraceLogger:
             latency_ms=evo2_response.latency_ms,
         )
 
+    def persist_failed(
+        self,
+        trace_id: str,
+        param_map: ParameterMap,
+        gate_record: GateApprovalRecord,
+        error_msg: str,
+    ) -> str:
+        """
+        Persiste spec y gates aunque Evo2 haya fallado.
+        Garantia BETO: las decisiones del operador quedan registradas
+        independientemente del resultado del modelo.
+        Status: FAILED — distinguible de TRACE_VERIFIED.
+        """
+        spec_hash = self._compute_spec_hash(param_map)
+
+        with sqlite3.connect(self._db_path) as conn:
+            conn.execute("PRAGMA journal_mode=WAL")
+
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO executions
+                (trace_id, timestamp, operator_id, spec_hash, task_type, status)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    trace_id,
+                    datetime.now(timezone.utc).isoformat(),
+                    param_map.operator_id,
+                    spec_hash,
+                    param_map.task_type.value if param_map.task_type else None,
+                    f"FAILED: {error_msg[:200]}",
+                ),
+            )
+
+            for param_name, entry in param_map.parameters.items():
+                conn.execute(
+                    """
+                    INSERT OR IGNORE INTO parameters
+                    (trace_id, param_name, value, epistemic_state, source)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        trace_id,
+                        param_name,
+                        json.dumps(entry.value),
+                        entry.epistemic_state.value,
+                        entry.source,
+                    ),
+                )
+
+            for gate_id, gate_data in [
+                ("gate_a", gate_record.gate_a),
+                ("gate_b", gate_record.gate_b),
+                ("gate_c", gate_record.gate_c),
+            ]:
+                if gate_data:
+                    conn.execute(
+                        """
+                        INSERT OR IGNORE INTO gate_approvals
+                        (trace_id, gate_id, timestamp, operator_id, payload_hash)
+                        VALUES (?, ?, ?, ?, ?)
+                        """,
+                        (
+                            trace_id,
+                            gate_id,
+                            gate_data.timestamp,
+                            gate_data.operator_id,
+                            gate_record.payload_hash if gate_id == "gate_c" else "",
+                        ),
+                    )
+
+            conn.commit()
+
+        return spec_hash
+
     def export_trace_registry(self, output_path: str = "TRACE_REGISTRY.json") -> None:
         """
         Exporta el TRACE_REGISTRY completo a JSON.
