@@ -3,6 +3,10 @@
 > Three complete empirical cycles — 43 source files — 100% TRACE_VERIFIED
 > — 0 silent completions.
 
+> 🧬 **NEW — First Life Sciences Integration:**
+> [BETO × Evo2](examples/beto-evo2/) — Epistemic governance over Arc Institute's DNA language model.
+> Real Evo2-7B run. TRACE_VERIFIED. Zero silent completions in genomic sequence generation.
+
 # BETO Framework
 
 > **BETO formalizes the ignorance of an AI.**
@@ -221,6 +225,7 @@ beto-framework/
 │       ├── SKILL.md
 │       └── references/              ← All BETO templates, including v4.4
 ├── examples/
+│   ├── beto-evo2/                   ← 🧬 First life sciences integration: BETO × Evo2 (DNA model)
 │   ├── gastos_personales/           ← Complete cycle: personal expense tracker
 │   └── beto_executor_self_specification/  ← Complete cycle: BETO specifying itself
 └── research/
@@ -231,8 +236,9 @@ beto-framework/
 
 ## Examples
 
-Two complete BETO cycles are included as reference:
+Three complete BETO cycles are included as reference:
 
+- 🧬 **[examples/beto-evo2/](examples/beto-evo2/)** — **First life sciences integration.** BETO as epistemic governance layer over [Evo2](https://github.com/ArcInstitute/evo2) (Arc Institute DNA language model, *Nature* 2026). Real Evo2-7B run via NVIDIA NIM API. 8 critical genomic parameters, 3 human gates, TRACE_VERIFIED. Zero silent completions in genomic sequence generation. `DECLARED: 8 / NOT_STATED: 0 / INFERRED: 0`
 - **[examples/gastos_personales/](examples/gastos_personales/)** — Personal expense tracker. 3 TRACE_VERIFIED Python files, 30 authorized IDs, 0 silent completions.
 - **[examples/beto_executor_self_specification/](examples/beto_executor_self_specification/)** — BETO specifying its own executor. 5 nodes, 14 files, 100% TRACE_VERIFIED.
 

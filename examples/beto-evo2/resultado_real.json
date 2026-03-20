@@ -1,0 +1,80 @@
+{
+  "trace_id": "BETO-EVO2-20260320-92B0AA3C",
+  "evo2_output": "GTCCAATTTGGTATTTTTCTACCATGTATTTTTTTTATTTTTTTTTATTTCCATTATATTAACAAGTTTTTTTATTATTATTATTTATCTTTTATTAGTTTGCAACTTATTAAAGAGCCTTATACCACTAAATGTGGTCATTCTTTTTGTTATGAATGTCTTAATCACTATTTACAAGCTTTTAGAAATTGTCCAGTATGTCAAACAGATGTTGAAACTTCTCAAATTGTAAATATTGTACTTCAAAATATCTTGG",
+  "spec_hash": "4ea572f3d9856b9c",
+  "trace_status": "TRACE_VERIFIED",
+  "model_used": "evo2-7B",
+  "latency_ms": 10645,
+  "epistemic_manifest": {
+    "protocol": "BETO-EVO2 v1.0",
+    "task_type": "GENERATION",
+    "operator_id": "aramirez",
+    "parameters": {
+      "organism": {
+        "value": "Homo sapiens",
+        "epistemic_state": "DECLARED",
+        "source": "operator_input"
+      },
+      "bio_function": {
+        "value": "modular BRCA1 expression",
+        "epistemic_state": "DECLARED",
+        "source": "operator_input"
+      },
+      "sequence_length": {
+        "value": 256,
+        "epistemic_state": "DECLARED",
+        "source": "operator_input"
+      },
+      "biosafety_level": {
+        "value": "BSL-2",
+        "epistemic_state": "DECLARED",
+        "source": "operator_input"
+      },
+      "evo2_model_size": {
+        "value": "7B",
+        "epistemic_state": "DECLARED",
+        "source": "operator_input"
+      },
+      "sampling_temp": {
+        "value": 0.7,
+        "epistemic_state": "DECLARED",
+        "source": "operator_input"
+      },
+      "top_k": {
+        "value": 4,
+        "epistemic_state": "DECLARED",
+        "source": "operator_input"
+      },
+      "excluded_motifs": {
+        "value": [],
+        "epistemic_state": "DECLARED",
+        "source": "operator_input"
+      }
+    },
+    "gate_approvals": {
+      "gate_a": {
+        "approved": true,
+        "timestamp": "2026-03-20T17:23:15.284444+00:00",
+        "operator_id": "aramirez"
+      },
+      "gate_b": {
+        "approved": true,
+        "timestamp": "2026-03-20T17:23:15.284545+00:00",
+        "operator_id": "aramirez"
+      },
+      "gate_c": {
+        "approved": true,
+        "timestamp": "2026-03-20T17:23:15.284659+00:00",
+        "operator_id": "aramirez"
+      }
+    },
+    "model_used": "evo2-7B",
+    "payload_hash": "36b3cc120243c988",
+    "latency_ms": 10645,
+    "epistemic_summary": {
+      "declared": 8,
+      "not_stated": 0,
+      "inferred": 0
+    }
+  }
+}

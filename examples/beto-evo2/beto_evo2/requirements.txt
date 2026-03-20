@@ -1,0 +1,9 @@
+# BETO-EVO2 — Dependencias declaradas
+# BETO-TRACE: BETO-EVO2.ROOT.SYSTEM.Boundary
+
+# Evo2 via NVIDIA NIM API (OQ-05 DECLARED [BETO_ASSISTED])
+# Endpoint: https://health.api.nvidia.com/v1/biology/arc/evo2-40b/generate
+requests>=2.31.0
+
+# SQLite: stdlib Python 3.11+ — sin dependencia externa requerida
+# BETO-TRACE: BETO-EVO2.SEC4.SCHEMA.SQLite.executions
