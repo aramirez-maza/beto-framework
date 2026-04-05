@@ -1,15 +1,15 @@
 ---
 name: beto-framework
-description: Epistemic governance protocol for LLM-assisted software specification and materialization. Runs the complete BETO v4.5 11-step process from a raw idea to a fully traceable, materializable specification, with internal routing, adaptive context loading, and product fit closure. Use when the user says "run BETO on this idea", "corre BETO", "especifica este sistema con BETO", "apply BETO to", "quiero especificar un sistema", or wants to build software with formal traceability, operator-controlled gates, and zero silent completions.
+description: Epistemic governance protocol for LLM-assisted software specification and materialization. Runs the complete BETO v4.4 11-step process from a raw idea to a fully traceable, materializable specification, with internal routing and adaptive context loading. Use when the user says "run BETO on this idea", "corre BETO", "especifica este sistema con BETO", "apply BETO to", "quiero especificar un sistema", or wants to build software with formal traceability, operator-controlled gates, and zero silent completions.
 license: MIT
 metadata:
   author: Alberto Ramirez
-  version: 4.5.0
+  version: 4.4.1
   github: github.com/aramirez-maza/beto-framework
 ---
 
-# BETO Framework v4.5
-## Product Fit Closure Layer
+# BETO Framework v4.4
+## Execution Efficiency and Routing Layer
 
 BETO formalizes the ignorance of an AI.
 
@@ -60,7 +60,7 @@ When the operator overrides a BETO_ASSISTED resolution, evaluate the override be
 
 When the user provides an idea, say:
 
-> "Running BETO v4.5. Starting with Step 0 — Semantic Eligibility Assessment."
+> "Running BETO v4.4. Starting with Step 0 — Semantic Eligibility Assessment."
 
 Then execute the steps in sequence.
 
@@ -84,17 +84,6 @@ Output exactly one of: `GO`, `GO_WITH_WARNINGS`, or `NO_GO`.
 - `NO_GO` → mandatory halt. Do not proceed. Explain why.
 - `GO` or `GO_WITH_WARNINGS` → proceed to Step 1.
 
-**Additionally, when GO or GO_WITH_WARNINGS**, extract and register the following seeds for the Product Fit layer. These are BETO_ASSISTED proposals anchored to the IDEA_RAW — the operator confirms them at G-1:
-
-```
-INTENT_SEED
-  INTENT_TYPE:          [e.g. automation | optimization | monitoring | generation | analysis | integration]
-  EXPECTED_PRODUCT_TYPE:[e.g. CLI tool | library | service | pipeline | agent | report]
-  GOODNESS_SIGNAL:      [one-sentence description of what success looks like for this idea]
-```
-
-These seeds travel to Step 1 and anchor the PRELIMINARY_GOODNESS_CRITERIA. They do not affect the GO/GO_WITH_WARNINGS/NO_GO verdict.
-
 ### Step 1 — BETO_CORE Root Draft (G-1 GATE)
 Using `references/PROMPT_CANONICO_DE_ELICITACION.md` and `references/BETO_CORE_TEMPLATE.md`:
 - Generate exactly one BETO_CORE_DRAFT.md
@@ -104,31 +93,6 @@ Using `references/PROMPT_CANONICO_DE_ELICITACION.md` and `references/BETO_CORE_T
   - Select best option anchored to System Intent
   - Register as `DECLARED [BETO_ASSISTED]` with justification
   - Include full resolution log in the draft
-
-**Additionally**, append a mandatory section to BETO_CORE_DRAFT.md:
-
-```
-─── PRODUCT FIT PROFILE ─────────────────────
-INTENT_PROFILE
-  intent_type:           [from Step 0 INTENT_SEED]
-  expected_product_type: [from Step 0 INTENT_SEED]
-  goodness_signal:       [from Step 0 INTENT_SEED]
-
-PRELIMINARY_GOODNESS_CRITERIA          [BETO_ASSISTED]
-  fidelity_to_intent:    [what the product must correspond to from the original idea]
-  functional_adequacy:   [what it must do to serve its declared purpose]
-  scope_coherence:       [what would make it too narrow or too broad]
-  minimum_quality:       [minimum standard for this type of product]
-  closure_criterion:     [what "good enough to produce" means for this system]
-
-fit_gate_mode:           MANUAL        ← operator may change to AUTO_ASSISTED at G-1
-─────────────────────────────────────────────
-```
-
-All five goodness criteria are proposed BETO_ASSISTED, anchored to INTENT_SEED from Step 0 and System Intent from BETO_CORE. The operator reviews and may override any criterion at G-1. Once approved, these criteria are DECLARED and govern Step 6B.
-
-`fit_gate_mode: MANUAL` means the operator approves Step 6B results explicitly. If changed to `AUTO_ASSISTED` at G-1, Step 6B proceeds automatically when result is FIT_APPROVED or FIT_APPROVED_WITH_LIMITS — the auto-decision is logged as `FIT_GATE [AUTO_ASSISTED]` and remains fully traceable.
-
 - Before presenting the draft, display the Gate Status Summary:
   ```
   ─── GATE G-1 ───────────────────────────────
@@ -225,54 +189,6 @@ Artifacts produced:
 
 Result required: all BETO_COREs in SUCCESS_CLOSED state
 
-### Step 6B — Product Fit Closure (CIERRE_ASISTIDO_DE_BONDAD)
-
-Executed immediately after Step 6 (OSC) and before Step 7 (Phases).
-
-**Purpose:** Evaluate whether the operationally closed specification not only *can be executed* but *merits being produced as specified* — relative to the intention that originated it.
-
-**Input:** BETO_COREs in SUCCESS_CLOSED state + PRELIMINARY_GOODNESS_CRITERIA declared at G-1.
-
-**Evaluation:** For each of the five declared goodness criteria, run PRODUCT_FIT_CHECK:
-
-| Field | Question |
-|---|---|
-| fidelity_to_intent | Does the closed spec correspond to what the idea actually wanted to create? |
-| functional_adequacy | Does it serve its declared purpose without relevant gaps? |
-| scope_coherence | Is it neither too narrow nor expanded beyond declared intent? |
-| minimum_quality | Does it meet the minimum standard for this type of product? |
-| closure_criterion | Is it sufficiently good to produce without entering further cycles? |
-
-**Per field, assign:**
-- `FIT_PASS` — criterion is met by the closed spec
-- `FIT_PASS_WITH_LIMITS` — criterion is met with accepted tolerable gaps (register in FIT_RESIDUE)
-- `FIT_FAIL` — criterion is not met → generate `BETO_GAP_PRODUCT_FIT`
-
-**Anti-perfectionism policy:** `max_product_fit_requestions = 2`. If after 2 re-questions a criterion remains FIT_FAIL, it is accepted as `FIT_WITH_LIMITS` or escalated to operator — never an infinite loop.
-
-**Overall result (gate G-2C — Product Fit Gate):**
-- `FIT_APPROVED` — all five criteria FIT_PASS
-- `FIT_APPROVED_WITH_LIMITS` — one or more FIT_PASS_WITH_LIMITS, none FIT_FAIL
-- `FIT_BLOCKED_BY_PRODUCT_GAP` — one or more criteria FIT_FAIL after max requestions
-
-**If fit_gate_mode = MANUAL:**
-- Present the Product Fit evaluation to the operator
-- Operator approves, overrides, or rejects before Step 7 begins
-
-**If fit_gate_mode = AUTO_ASSISTED:**
-- FIT_APPROVED or FIT_APPROVED_WITH_LIMITS → proceed automatically to Step 7
-- Decision logged as `FIT_GATE [AUTO_ASSISTED]` with full evaluation trace
-- FIT_BLOCKED_BY_PRODUCT_GAP → always escalates to operator regardless of mode
-
-**Artifacts produced:**
-- `PRODUCT_FIT_CLOSURE.md` — full evaluation with per-criterion results
-- `FIT_RESIDUE.md` — if FIT_PASS_WITH_LIMITS exist (accepted tolerable gaps)
-- `BETO_GAP_PRODUCT_FIT` entries — if FIT_FAIL after max requestions
-
-**Result required to proceed:** FIT_APPROVED or FIT_APPROVED_WITH_LIMITS before Step 7 begins.
-
----
-
 ### Step 7 — Phase Documents
 For each closed BETO_CORE, read Section 7 (Phase Architecture) and generate one PHASE document per declared phase using `references/PHASE_TEMPLATE.md`. Do not create phases not declared in the BETO_CORE.
 
@@ -304,14 +220,9 @@ Include in the manifest:
   BETO_GAPs: [N]                        ← if N > 0, list each on next line:
     → [TRACE_ID] [ESCALATED | RESOLVED: BETO_ASSISTED]
   OQs open:  0
-  Product Fit: [APPROVED | WITH_LIMITS | BLOCKED]
-  Fit mode:    [MANUAL | AUTO_ASSISTED]
-  Fit gaps:    [N]                      ← if N > 0, list each on next line:
-    → [CRITERION] [FIT_FAIL | FIT_PASS_WITH_LIMITS]
   ─────────────────────────────────────────────
   ```
-  If BETO_GAPs = 0, omit the indented BETO_GAP lines entirely.
-  If Fit gaps = 0, omit the indented fit gap lines entirely.
+  If BETO_GAPs = 0, omit the indented lines entirely.
 - Present to operator → **GATE G-3: operator must approve or reject before materialization begins**
 
 ### Step 10 — Materialization
@@ -381,28 +292,6 @@ There is no silent resolution.
 | DECLARED | Explicitly defined by the operator | Enables execution |
 | NOT_STATED | Not declared; cannot be inferred | Blocks execution — register as Open Question |
 | INFERRED | Derived by model | Authorized only in Steps 0-1. Prohibited after G-1 approval |
-
-## Product Fit States (BETO v4.5)
-
-These states govern the result of Step 6B — CIERRE_ASISTIDO_DE_BONDAD. They are separate from and complementary to the OSC states:
-
-| State | Meaning | Effect |
-|---|---|---|
-| FIT_APPROVED | All five goodness criteria pass | Proceed to Step 7 |
-| FIT_WITH_LIMITS | One or more criteria pass with accepted tolerable gaps | Proceed — limits registered in FIT_RESIDUE.md |
-| FIT_RAW | One or more criteria fail after max_product_fit_requestions | Blocked — generates BETO_GAP_PRODUCT_FIT |
-
-**BETO_GAP_PRODUCT_FIT** — new gap type. A criterion exists and was evaluated but is not sufficiently met for the product to merit production as specified. Complements, does NOT replace, BETO_GAP_EXECUTIONAL.
-
-**Rule:** The spec is not ready for materialization just because it is operationally closed (OSC). It must also reach FIT_APPROVED or FIT_WITH_LIMITS.
-
-**Separation principle:**
-| Layer | Evaluates | Blocking state |
-|---|---|---|
-| OSC (Step 6) | Can it be executed? | DECLARED_RAW → BETO_GAP_EXECUTIONAL |
-| Product Fit (Step 6B) | Does it merit being produced this way? | FIT_RAW → BETO_GAP_PRODUCT_FIT |
-
----
 
 ## OSC States — Operational Semantic Closure (BETO v4.3)
 
@@ -485,34 +374,17 @@ Respond in the operator's language. BETO operates in Spanish and English.
 
 ## Version and Updates
 
-**Current version:** 4.5.0
+**Current version:** 4.4.1
 
 When the operator starts a BETO session, display the version once:
 ```
-BETO Skill v4.5.0 — github.com/aramirez-maza/beto-framework
+BETO Skill v4.4.1 — github.com/aramirez-maza/beto-framework
 ```
 
 If the operator asks about updates or the current version, tell them:
 - Current installed version is visible in this file (metadata.version)
 - To update: `cp -r skills/beto-framework ~/.claude/skills/` from the latest repo
 - Changelog is at `CHANGELOG.md` in the repository
-
-## What's new in BETO v4.5 — Product Fit Closure Layer
-
-BETO v4.5 adds a formal product fit evaluation layer on top of v4.4 without changing the core protocol:
-
-- **INTENT_SEED at Step 0:** `INTENT_TYPE`, `EXPECTED_PRODUCT_TYPE`, `GOODNESS_SIGNAL` extracted at eligibility — seeds the fit layer from the very start
-- **PRELIMINARY_GOODNESS_CRITERIA at Step 1:** mandatory `PRODUCT FIT PROFILE` block in BETO_CORE_DRAFT — five declared criteria (fidelity, functional adequacy, scope coherence, minimum quality, closure criterion); BETO_ASSISTED, approved at G-1
-- **fit_gate_mode per cycle:** `MANUAL` (operator reviews Step 6B explicitly) or `AUTO_ASSISTED` (auto-proceeds on FIT_APPROVED / FIT_APPROVED_WITH_LIMITS, always escalates FIT_BLOCKED); declared at G-1, fully traceable
-- **Step 6B — CIERRE_ASISTIDO_DE_BONDAD:** new step between OSC (Step 6) and Phases (Step 7); evaluates all five goodness criteria against the operationally closed spec; result: FIT_APPROVED / FIT_APPROVED_WITH_LIMITS / FIT_BLOCKED_BY_PRODUCT_GAP
-- **Gate G-2C — Product Fit Gate:** internal gate (like G-2B); not a human gate unless mode=MANUAL or result=BLOCKED
-- **Anti-perfectionism policy:** `max_product_fit_requestions = 2` — mirrors OSC policy; tolerable gaps → FIT_WITH_LIMITS, never infinite cycles
-- **New states:** FIT_APPROVED, FIT_WITH_LIMITS, FIT_RAW — separate from and complementary to OSC states
-- **New gap type:** BETO_GAP_PRODUCT_FIT — criterion exists and was evaluated but spec does not merit production as specified
-- **New artifacts:** PRODUCT_FIT_CLOSURE.md, FIT_RESIDUE.md (if limits exist)
-- **G-3 extended:** Gate Status Summary now includes Product Fit status, fit_gate_mode, and Fit gaps list
-- **Separation principle enforced:** OSC = can it be executed? / Product Fit = does it merit being produced this way?
-- **Backward compatible:** all v4.4 artifacts remain valid; cycles without PRELIMINARY_GOODNESS_CRITERIA skip Step 6B cleanly
 
 ## What's new in BETO v4.4 — Execution Efficiency and Routing Layer
 
