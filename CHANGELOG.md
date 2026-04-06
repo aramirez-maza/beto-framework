@@ -6,6 +6,58 @@ Format: `[version] — date — description`
 
 ---
 
+## [Skill 4.5.0] — 2026-04-06
+
+**BETO Skill v4.5.0 — Product Fit Closure Layer**
+
+Adds a product fit verification layer to the Skill on top of v4.4.1. The Skill now guarantees not only that a system *can be executed*, but that it *deserves to be produced as specified* — relative to the intention that originated it.
+
+**New in Step 0 — INTENT_SEED extraction:**
+- On GO or GO_WITH_WARNINGS, extract and register `INTENT_SEED` before proceeding to Step 1
+- Fields: `INTENT_TYPE`, `EXPECTED_PRODUCT_TYPE`, `GOODNESS_SIGNAL`
+- Seeds are BETO_ASSISTED proposals anchored to IDEA_RAW — operator confirms at G-1
+- Seeds anchor the PRELIMINARY_GOODNESS_CRITERIA in Step 1
+
+**New in Step 1 — PRODUCT FIT PROFILE block:**
+- BETO_CORE_DRAFT now includes a mandatory `PRODUCT FIT PROFILE` section
+- Contains: INTENT_PROFILE (from INTENT_SEED) + PRELIMINARY_GOODNESS_CRITERIA (5 fields, BETO_ASSISTED) + `fit_gate_mode`
+- 5 criteria: `fidelity_to_intent`, `functional_adequacy`, `scope_coherence`, `minimum_quality`, `closure_criterion`
+- `fit_gate_mode`: `MANUAL` (operator approves Step 6B explicitly) or `AUTO_ASSISTED` (proceeds automatically on non-blocked results)
+- Operator reviews PRODUCT FIT PROFILE at G-1 — may override any criterion
+
+**New Step 6B — Product Fit Closure (CIERRE_ASISTIDO_DE_BONDAD):**
+- Executed immediately after Step 6 (OSC) and before Step 7 (Phases)
+- Runs PRODUCT_FIT_CHECK on each of the 5 declared criteria
+- Per-criterion states: `FIT_PASS`, `FIT_PASS_WITH_LIMITS`, `FIT_FAIL`
+- Overall gate G-2C: `FIT_APPROVED` / `FIT_APPROVED_WITH_LIMITS` / `FIT_BLOCKED_BY_PRODUCT_GAP`
+- Anti-perfectionism: `max_product_fit_requestions = 2` — tolerates FIT_WITH_LIMITS
+- fit_gate_mode MANUAL: presents G-2C to operator before Step 7
+- fit_gate_mode AUTO_ASSISTED: proceeds automatically on non-blocked; always escalates FIT_BLOCKED
+- New gap type: `BETO_GAP_PRODUCT_FIT`
+
+**Gate G-3 extended:**
+- Gate Status Summary now includes: `Fit gate`, `G-2C` result, `Fit gaps` count
+
+**New artifacts:**
+- `PRODUCT_FIT_CLOSURE.md` — full evaluation with per-criterion results
+- `FIT_RESIDUE.md` — accepted tolerable gaps (FIT_PASS_WITH_LIMITS entries)
+- `PRODUCT_GAP_REGISTRY.md` — if BETO_GAP_PRODUCT_FIT exist
+
+**Guarantee chain complete:**
+```
+Step 0  → detects intent and goodness signal
+Step 1  → declares goodness criteria (approved at G-1)
+Step 6  → guarantees executability (OSC)
+Step 6B → guarantees the system deserves to be built as specified (Product Fit)
+Step 10 → materializes with both guarantees active
+```
+
+**Backward compatible** with all BETO v4.4 artifacts and cycles.
+
+**Proof of concept:** BLENDERFACE system (photo → FLAME 3D mesh → Blender) — specified and fully materialized using BETO v4.4, demonstrating end-to-end pipeline automation without human intervention. The Product Fit layer would have surfaced the fidelity threshold and UV texture projection as explicit criteria before materialization.
+
+---
+
 ## [4.5.0] — 2026-03-18
 
 **BETO Framework v4.5 — SQLite Persistence Layer**
