@@ -1,11 +1,14 @@
 > **Status:** v4.5.0 — Stable, field-tested. Protocol: production-ready.
 > Executor: active development. Skill: available for Claude Code.
-> Three complete empirical cycles — 43 source files — 100% TRACE_VERIFIED
+> Four complete empirical cycles — 55 source files — 100% TRACE_VERIFIED
 > — 0 silent completions.
 
-> 🧬 **NEW — First Life Sciences Integration:**
-> [BETO × Evo2](examples/beto-evo2/) — Epistemic governance over Arc Institute's DNA language model.
+> 🧬 **[BETO × Evo2](examples/beto-evo2/)** — Epistemic governance over Arc Institute's DNA language model.
 > Real Evo2-7B run. TRACE_VERIFIED. Zero silent completions in genomic sequence generation.
+
+> 🎨 **NEW — First 3D Pipeline Integration:**
+> [BETO × Blender MCP](examples/beto-blender-mcp/) — Blender 5.1 MCP addon for a FLAME head + hair pipeline.
+> Real Blender 5.1 addon running. Operator-declared threading model. 69 BETO-TRACE annotations. 0 silent completions.
 
 # BETO Framework
 
@@ -226,6 +229,7 @@ beto-framework/
 │       └── references/              ← All BETO templates, including v4.4
 ├── examples/
 │   ├── beto-evo2/                   ← 🧬 First life sciences integration: BETO × Evo2 (DNA model)
+│   ├── beto-blender-mcp/            ← 🎨 First 3D pipeline integration: Blender 5.1 MCP addon
 │   ├── gastos_personales/           ← Complete cycle: personal expense tracker
 │   └── beto_executor_self_specification/  ← Complete cycle: BETO specifying itself
 └── research/
@@ -239,6 +243,7 @@ beto-framework/
 Three complete BETO cycles are included as reference:
 
 - 🧬 **[examples/beto-evo2/](examples/beto-evo2/)** — **First life sciences integration.** BETO as epistemic governance layer over [Evo2](https://github.com/ArcInstitute/evo2) (Arc Institute DNA language model, *Nature* 2026). Real Evo2-7B run via NVIDIA NIM API. 8 critical genomic parameters, 3 human gates, TRACE_VERIFIED. Zero silent completions in genomic sequence generation. `DECLARED: 8 / NOT_STATED: 0 / INFERRED: 0`
+- 🎨 **[examples/beto-blender-mcp/](examples/beto-blender-mcp/)** — **First 3D pipeline integration.** Blender 5.1 MCP addon for a FLAME head mesh + 3D hair pipeline. Operator-declared threading model (concurrency constraints at G-1). 8 nodes, 13 handlers, 69 BETO-TRACE annotations, TRACE_VERIFIED. Real addon running in Blender 5.1. `DECLARED: 54 / BETO_GAPS: 0 / SILENT_COMPLETIONS: 0`
 - **[examples/gastos_personales/](examples/gastos_personales/)** — Personal expense tracker. 3 TRACE_VERIFIED Python files, 30 authorized IDs, 0 silent completions.
 - **[examples/beto_executor_self_specification/](examples/beto_executor_self_specification/)** — BETO specifying its own executor. 5 nodes, 14 files, 100% TRACE_VERIFIED.
 
